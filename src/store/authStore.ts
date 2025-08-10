@@ -145,9 +145,10 @@ interface AuthState {
   fetchCurrentUser: () => Promise<void>;
   // Nouvelles fonctions admin
   fetchActiveUsers: (page?: number) => Promise<void>; // 🆕 Ajout paramètre page
+  fetchInactiveUsers: (page?: number) => Promise<void>;
   fetchAdminStats: () => Promise<void>;
   toggleUserStatus: (userId: string) => Promise<boolean>;
-  toggleUserRole: (userId: string, newRole: UserRole) => Promise<boolean>;
+  toggleUserRole: (accountId: number, newRole: UserRole) => Promise<boolean>;
   updateCoins: (amount: number) => void;
   updateUser: (userData: Partial<User>) => void;
   updateUserCoins: (userId: string, amount: number) => void;
@@ -634,6 +635,71 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
+  fetchInactiveUsers: async (page = 1) => {
+    const { authToken, user } = get();
+    
+    if (!authToken || !user || user.role !== 'admin') {
+      console.error('Accès non autorisé pour récupérer les utilisateurs inactifs');
+      return;
+    }
+
+    set({ isLoadingAdminData: true });
+
+    try {
+      console.log(`🔄 Récupération des utilisateurs inactifs (page ${page})...`);
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/users/inactive?page=${page}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erreur HTTP: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Réponse API /users/inactive complète:', data);
+
+      if (data.data && data.meta) {
+        const apiUsers = Array.isArray(data.data) ? data.data : [];
+        const mappedUsers: User[] = apiUsers.map((apiUser: any) => {
+          console.log('🔄 Mapping utilisateur API:', apiUser);
+          return mapSimpleApiUserToUser(apiUser);
+        });
+
+        const pagination: PaginationMeta = {
+          total: data.meta.total,
+          perPage: data.meta.perPage,
+          currentPage: data.meta.currentPage,
+          lastPage: data.meta.lastPage,
+          firstPage: data.meta.firstPage,
+          firstPageUrl: data.meta.firstPageUrl,
+          lastPageUrl: data.meta.lastPageUrl,
+          nextPageUrl: data.meta.nextPageUrl,
+          previousPageUrl: data.meta.previousPageUrl
+        };
+
+        console.log(`📊 ${mappedUsers.length} utilisateurs récupérés (page ${page}/${pagination.lastPage})`);
+        console.log('📄 Pagination:', pagination);
+
+        set({ 
+          adminUsers: mappedUsers,
+          usersPagination: pagination,
+          isLoadingAdminData: false
+        });
+      } else {
+        console.error('Format de réponse API inattendu:', data);
+        set({ isLoadingAdminData: false });
+      }
+    } catch (error) {
+      console.error('❌ Erreur lors de la récupération des utilisateurs inactifs:', error);
+      set({ isLoadingAdminData: false });
+    }
+  },
+
   // ✅ NOUVELLE API: Récupérer les statistiques admin (structure API complète)
   fetchAdminStats: async () => {
     const { authToken, user } = get();
@@ -730,7 +796,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   // 🆕 NOUVELLE API: Changer le rôle d'un utilisateur
-  toggleUserRole: async (userId: string, newRole: UserRole) => {
+  toggleUserRole: async (accountId: number, newRole: UserRole) => {
     const { authToken, user } = get();
     
     if (!authToken || !user || user.role !== 'admin') {
@@ -739,8 +805,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     try {
-      console.log(`🔄 Modification du rôle utilisateur ${userId} vers ${newRole}...`);
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/users/${userId}/toggle-role`, {
+      console.log(`🔄 Modification du rôle utilisateur ${accountId} vers ${newRole}...`);
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/users/${accountId}/toggle-role`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${authToken}`,
@@ -761,11 +827,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // Mettre à jour la liste des utilisateurs localement
         const { adminUsers } = get();
         const updatedUsers = adminUsers.map(u => 
-          u.id === userId ? { ...u, role: newRole } : u
+          u.accountId === accountId ? { ...u, role: newRole } : u
         );
         
         set({ adminUsers: updatedUsers });
-        console.log(`✅ Rôle utilisateur ${userId} modifié vers ${newRole} avec succès`);
+        console.log(`✅ Rôle utilisateur ${accountId} modifié vers ${newRole} avec succès`);
         return true;
       } else {
         console.error('Échec de la modification du rôle:', data);

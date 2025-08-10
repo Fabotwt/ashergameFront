@@ -31,6 +31,7 @@ export const AdminUsers: React.FC = () => {
     usersPagination,
     isLoadingAdminData,
     fetchActiveUsers, 
+    fetchInactiveUsers,
     fetchAdminStats, 
     toggleUserStatus, 
     toggleUserRole 
@@ -38,16 +39,21 @@ export const AdminUsers: React.FC = () => {
   
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('active');
   const [currentPage, setCurrentPage] = useState(1);
+  const [flashMessage, setFlashMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Charger les données au montage du composant
+  // Charger les données au montage et lorsque les filtres changent
   useEffect(() => {
     if (user?.role === 'admin') {
       fetchAdminStats();
-      fetchActiveUsers(currentPage);
+      if (statusFilter === 'active') {
+        fetchActiveUsers(currentPage);
+      } else if (statusFilter === 'inactive') {
+        fetchInactiveUsers(currentPage);
+      }
     }
-  }, [user, currentPage]);
+  }, [user, currentPage, statusFilter]);
 
   // Fonction pour changer de page
   const handlePageChange = (newPage: number) => {
@@ -102,7 +108,11 @@ export const AdminUsers: React.FC = () => {
     }
   };
 
-  const handleToggleRole = async (userId: string, currentRole: string) => {
+  const handleToggleRole = async (accountId: number | undefined, currentRole: string) => {
+    if (accountId === undefined) {
+      console.error("User accountId is undefined");
+      return;
+    }
     // Cycle entre les rôles : player -> cashier -> admin -> player
     let newRole: 'player' | 'cashier' | 'admin';
     switch (currentRole) {
@@ -119,22 +129,27 @@ export const AdminUsers: React.FC = () => {
         newRole = 'player';
     }
 
-    const success = await toggleUserRole(userId, newRole);
+    const success = await toggleUserRole(accountId, newRole);
     if (success) {
-      console.log(`Rôle utilisateur modifié vers ${newRole} avec succès`);
+      setFlashMessage({ type: 'success', message: `Rôle utilisateur modifié vers ${newRole} avec succès` });
+      setTimeout(() => setFlashMessage(null), 3000);
+    } else {
+      setFlashMessage({ type: 'error', message: 'Erreur lors de la modification du rôle' });
+      setTimeout(() => setFlashMessage(null), 3000);
     }
   };
 
-  // Filtrer les utilisateurs localement (en plus de la pagination API)
+  const handleStatusFilterChange = (newStatus: string) => {
+    setStatusFilter(newStatus);
+    setCurrentPage(1); // Réinitialiser à la première page lors du changement de filtre
+  };
+
   const filteredUsers = adminUsers.filter(user => {
     const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (user.username && user.username.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesRole = roleFilter === 'all' || user.role === roleFilter;
-    const matchesStatus = statusFilter === 'all' || 
-                         (statusFilter === 'active' && user.enabled) ||
-                         (statusFilter === 'inactive' && !user.enabled);
-    return matchesSearch && matchesRole && matchesStatus;
+    return matchesSearch && matchesRole;
   });
 
   const getRoleIcon = (role: string) => {
@@ -162,6 +177,15 @@ export const AdminUsers: React.FC = () => {
   return (
     <div className="min-h-screen bg-base-100 p-6">
       <div className="max-w-7xl mx-auto">
+        {/* Flash Message */}
+        {flashMessage && (
+          <div className={`alert ${flashMessage.type === 'success' ? 'alert-success' : 'alert-error'} shadow-lg mb-4`}>
+            <div>
+              <span>{flashMessage.message}</span>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -255,9 +279,8 @@ export const AdminUsers: React.FC = () => {
                 <select
                   className="select select-bordered"
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
+                  onChange={(e) => handleStatusFilterChange(e.target.value)}
                 >
-                  <option value="all">Tous les statuts</option>
                   <option value="active">Actifs</option>
                   <option value="inactive">Inactifs</option>
                 </select>
@@ -336,7 +359,7 @@ export const AdminUsers: React.FC = () => {
                       </button>
                       <button
                         className="btn btn-sm btn-outline"
-                        onClick={() => handleToggleRole(user.id, user.role)}
+                        onClick={() => handleToggleRole(user.accountId, user.role)}
                       >
                         {getRoleIcon(user.role)}
                         Changer rôle
