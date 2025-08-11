@@ -34,7 +34,8 @@ export const AdminUsers: React.FC = () => {
     fetchInactiveUsers,
     fetchAdminStats, 
     toggleUserStatus, 
-    toggleUserRole 
+    toggleUserRole, 
+    rechargeCashier
   } = useAuthStore();
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -42,6 +43,9 @@ export const AdminUsers: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('active');
   const [currentPage, setCurrentPage] = useState(1);
   const [flashMessage, setFlashMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [selectedUser, setSelectedUser] = useState<any | null>(null);
+  const [rechargeUser, setRechargeUser] = useState<any | null>(null);
+  const [rechargeAmount, setRechargeAmount] = useState(0);
 
   // Charger les données au montage et lorsque les filtres changent
   useEffect(() => {
@@ -161,6 +165,20 @@ export const AdminUsers: React.FC = () => {
       default:
         return <Shield className="w-4 h-4 text-base-content/50" />;
     }
+  };
+
+  const handleRecharge = async () => {
+    if (!rechargeUser || !rechargeAmount) return;
+    const success = await rechargeCashier(rechargeUser.accountNumber, rechargeAmount);
+    if (success) {
+      setFlashMessage({ type: 'success', message: 'Caissier rechargé avec succès' });
+      setTimeout(() => setFlashMessage(null), 3000);
+    } else {
+      setFlashMessage({ type: 'error', message: 'Erreur lors de la recharge' });
+      setTimeout(() => setFlashMessage(null), 3000);
+    }
+    setRechargeUser(null);
+    setRechargeAmount(0);
   };
 
   const getRoleBadge = (role: string) => {
@@ -364,6 +382,22 @@ export const AdminUsers: React.FC = () => {
                         {getRoleIcon(user.role)}
                         Changer rôle
                       </button>
+                      <button
+                        className="btn btn-sm btn-info"
+                        onClick={() => setSelectedUser(user)}
+                      >
+                        <Eye className="w-4 h-4" />
+                        Détails
+                      </button>
+                      {user.role === 'cashier' && (
+                        <button
+                          className="btn btn-sm btn-success"
+                          onClick={() => setRechargeUser(user)}
+                        >
+                          <Coins className="w-4 h-4" />
+                          Recharger
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -490,6 +524,59 @@ export const AdminUsers: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* User Details Modal */}
+      {selectedUser && (
+        <div className="modal modal-open">
+          <div className="modal-box w-11/12 max-w-2xl">
+            <h3 className="font-bold text-lg">Détails de l'utilisateur</h3>
+            <div className="py-4">
+              <p><strong>ID:</strong> {selectedUser.id}</p>
+              <p><strong>Nom:</strong> {selectedUser.name}</p>
+              <p><strong>Email:</strong> {selectedUser.email}</p>
+              <p><strong>Username:</strong> {selectedUser.username || 'N/A'}</p>
+              <p><strong>Rôle:</strong> {selectedUser.role}</p>
+              <p><strong>Statut:</strong> {selectedUser.enabled ? 'Actif' : 'Inactif'}</p>
+              <p><strong>Coins:</strong> {selectedUser.coins.toLocaleString()}</p>
+              <p><strong>Téléphone:</strong> {selectedUser.phone || 'N/A'}</p>
+              <p><strong>Pays:</strong> {selectedUser.country || 'N/A'}</p>
+              <p><strong>Dernière IP de connexion:</strong> {selectedUser.lastLoginIp || 'N/A'}</p>
+              <p><strong>Date de création:</strong> {selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleString() : 'N/A'}</p>
+            </div>
+            <div className="modal-action">
+              <button className="btn" onClick={() => setSelectedUser(null)}>Fermer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Recharge Modal */}
+      {rechargeUser && (
+        <div className="modal modal-open">
+          <div className="modal-box">
+            <h3 className="font-bold text-lg">Recharger le caissier: {rechargeUser.name}</h3>
+            <div className="py-4">
+              <p>Numéro de compte: {rechargeUser.accountNumber || 'N/A'}</p>
+              <div className="form-control">
+                <label className="label">
+                  <span className="label-text">Montant</span>
+                </label>
+                <input
+                  type="number"
+                  placeholder="Entrez le montant"
+                  className="input input-bordered"
+                  value={rechargeAmount}
+                  onChange={(e) => setRechargeAmount(Number(e.target.value))}
+                />
+              </div>
+            </div>
+            <div className="modal-action">
+              <button className="btn btn-success" onClick={handleRecharge}>Recharger</button>
+              <button className="btn" onClick={() => setRechargeUser(null)}>Annuler</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

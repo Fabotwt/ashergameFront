@@ -34,17 +34,29 @@ export interface Game {
 
 export interface Transaction {
   id: string;
-  userId: string;
-  type: 'deposit' | 'withdrawal' | 'transfer' | 'purchase' | 'affiliate' | 'referral_bonus';
-  amount: number;
+  accountId: number;
+  date: string;
+  type: 'deposit' | 'withdrawal' | 'transfer' | 'purchase' | 'affiliate' | 'referral_bonus' | 'Recharge';
   description: string;
-  status: 'pending' | 'completed' | 'rejected';
   reference?: string;
-  proof?: string;
-  network?: string;
-  recipientAddress?: string;
-  fee?: number;
+  amount: string;
+  urlImgPreuve?: string | null;
+  status: 'Pending' | 'Completed' | 'Rejected';
   createdAt: string;
+  updatedAt: string;
+  account?: {
+    id: number;
+    username: string;
+    password?: string;
+    lastLoginIp?: string | null;
+    lastLoginDate?: string | null;
+    email: string;
+    role: UserRole;
+    phone?: string;
+    country?: string;
+    enabled: number;
+    createdAt?: string | null;
+  };
 }
 
 export interface Affiliate {
@@ -159,6 +171,7 @@ interface AuthState {
   approveCashierRequest: (requestId: string, reviewNotes?: string) => Promise<void>;
   rejectCashierRequest: (requestId: string, reviewNotes?: string) => Promise<void>;
   createCashier: (cashierData: any) => Promise<void>;
+  rechargeCashier: (username: string, amount: number) => Promise<boolean>;
 }
 
 // Mock users for demo
@@ -353,27 +366,22 @@ const mapApiRoleToUserRole = (apiRole?: string): UserRole => {
 const mapSimpleApiUserToUser = (apiUser: any): User => {
   return {
     id: apiUser.id?.toString() || Date.now().toString(),
-    // Données manquantes - utiliser des valeurs par défaut
-    email: `${apiUser.username}@ashergame.com`, // Email généré depuis username
-    name: apiUser.username || 'Utilisateur', // Utiliser username comme nom
-    role: 'player', // Rôle par défaut (sera mis à jour via toggle si nécessaire)
-    coins: 0, // Coins par défaut
-    
-    // Données disponibles depuis l'API
+    email: apiUser.email || `${apiUser.username}@example.com`,
+    name: apiUser.username || 'Utilisateur',
+    role: mapApiRoleToUserRole(apiUser.role),
+    coins: parseInt(apiUser.coins) || 0,
     username: apiUser.username,
     lastLoginIp: apiUser.lastLoginIp,
-    enabled: true, // Par défaut activé (sera mis à jour via toggle si nécessaire)
-    
-    // Données optionnelles par défaut
-    phone: undefined,
-    country: undefined,
-    avatar: undefined,
-    referralCode: undefined,
-    referredBy: undefined,
+    enabled: apiUser.enabled === 1 || apiUser.enabled === true,
+    phone: apiUser.phone,
+    country: apiUser.country,
     accountId: apiUser.id,
-    accountNumber: undefined,
-    createdAt: undefined,
-    updatedAt: undefined
+    accountNumber: apiUser.account_number,
+    createdAt: apiUser.created_at,
+    updatedAt: apiUser.updated_at,
+    avatar: apiUser.avatar,
+    referralCode: apiUser.referral_code,
+    referredBy: apiUser.referred_by,
   };
 };
 
@@ -385,7 +393,7 @@ const mapApiUserToUser = (apiUser: any, apiAccount?: any): User => {
     name: apiUser.fullName || apiUser.name || apiUser.email?.split('@')[0] || 'Utilisateur',
     
     // Données depuis account si disponible
-    role: mapApiRoleToUserRole(apiAccount?.role || apiUser.role),
+    role: apiAccount?.role || apiUser.role,
     phone: apiAccount?.phone || apiUser.phone,
     country: apiAccount?.country || apiUser.country,
     username: apiAccount?.username || apiUser.username,
@@ -1073,5 +1081,45 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set(state => ({
       users: [...state.users, newCashier]
     }));
+  },
+
+  rechargeCashier: async (username: string, amount: number) => {
+    const { authToken, user } = get();
+    if (!authToken || !user || user.role !== 'admin') {
+      console.error('Accès non autorisé pour recharger un caissier');
+      return false;
+    }
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/cashiers/recharge`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
+        body: JSON.stringify({ username, amount })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erreur HTTP: ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data.status === 'success') {
+        // Mettre à jour la liste des utilisateurs localement
+        const { adminUsers } = get();
+        const updatedUsers = adminUsers.map(u =>
+          u.username === username ? { ...u, coins: u.coins + amount } : u
+        );
+        set({ adminUsers: updatedUsers });
+        return true;
+      } else {
+        return false;
+      }
+    } catch (error) {
+      console.error('Erreur lors de la recharge du caissier:', error);
+      return false;
+    }
   },
 }));

@@ -52,11 +52,12 @@ export const Dashboard: React.FC = () => {
     fetchActiveUsers,
     fetchAdminStats,
     toggleUserStatus,
-    toggleUserRole
+    toggleUserRole,
+    rechargeCashier
   } = useAuthStore();
   
   const [rechargeAmount, setRechargeAmount] = useState('');
-  const [targetUserId, setTargetUserId] = useState('');
+  const [targetUsername, setTargetUsername] = useState('');
   const [usdtAddress, setUsdtAddress] = useState('');
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
@@ -125,7 +126,7 @@ export const Dashboard: React.FC = () => {
       if (amount > 0) {
         updateCoins(amount);
         setRechargeAmount('');
-        setTargetUserId('');
+        setTargetUsername('');
         setUsdtAddress('');
       }
       setLoading(false);
@@ -138,11 +139,11 @@ export const Dashboard: React.FC = () => {
       const amount = parseInt(rechargeAmount);
       if (amount > 0 && amount <= user.coins) {
         updateCoins(-amount);
-        if (targetUserId) {
-          updateUserCoins(targetUserId, amount);
+        if (targetUsername) {
+          updateUserCoins(targetUsername, amount);
         }
         setRechargeAmount('');
-        setTargetUserId('');
+        setTargetUsername('');
       }
       setLoading(false);
     }, 1000);
@@ -210,6 +211,20 @@ export const Dashboard: React.FC = () => {
       await fetchActiveUsers();
       await fetchAdminStats();
     }
+  };
+
+  const handleRechargeCashier = async () => {
+    setLoading(true);
+    const amount = parseInt(rechargeAmount);
+    const success = await rechargeCashier(targetUsername, amount);
+    if (success) {
+      console.log('Caissier rechargé avec succès');
+      setRechargeAmount('');
+      setTargetUsername('');
+    } else {
+      console.error('Erreur lors de la recharge du caissier');
+    }
+    setLoading(false);
   };
 
   // Utiliser adminUsers pour les admins, sinon users mock
@@ -651,8 +666,8 @@ export const Dashboard: React.FC = () => {
                 type="text"
                 placeholder="ID du compte joueur"
                 className="input input-bordered"
-                value={targetUserId}
-                onChange={(e) => setTargetUserId(e.target.value)}
+                value={targetUsername}
+                onChange={(e) => setTargetUsername(e.target.value)}
               />
             </div>
             <div className="form-control">
@@ -881,6 +896,12 @@ export const Dashboard: React.FC = () => {
         >
           Gestion des Utilisateurs
         </button>
+        <button 
+          className={`tab ${activeTab === 'transactions' ? 'tab-active' : ''}`}
+          onClick={() => setActiveTab('transactions')}
+        >
+          Gestion des Transactions
+        </button>
       </div>
 
       {/* Tab Content */}
@@ -896,14 +917,14 @@ export const Dashboard: React.FC = () => {
               <div className="space-y-4">
                 <div className="form-control">
                   <label className="label">
-                    <span className="label-text">ID du caissier</span>
+                    <span className="label-text">Nom d'utilisateur du caissier</span>
                   </label>
                   <input
                     type="text"
-                    placeholder="ID du compte caissier"
+                    placeholder="Nom d'utilisateur du caissier"
                     className="input input-bordered"
-                    value={targetUserId}
-                    onChange={(e) => setTargetUserId(e.target.value)}
+                    value={targetUsername}
+                    onChange={(e) => setTargetUsername(e.target.value)}
                   />
                 </div>
                 <div className="form-control">
@@ -920,8 +941,8 @@ export const Dashboard: React.FC = () => {
                 </div>
                 <button
                   className={`btn btn-primary w-full ${loading ? 'loading' : ''}`}
-                  onClick={handleTransfer}
-                  disabled={!targetUserId || !rechargeAmount || loading}
+                  onClick={handleRechargeCashier}
+                  disabled={!targetUsername || !rechargeAmount || loading}
                 >
                   Recharger le caissier
                 </button>
@@ -1303,6 +1324,10 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {activeTab === 'transactions' && (
+        <Transactions />
       )}
     </div>
   );

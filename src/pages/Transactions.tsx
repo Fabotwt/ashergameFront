@@ -1,290 +1,323 @@
-import React, { useState } from 'react';
-import { useAuthStore } from '../store/authStore';
+import React, { useEffect, useState } from 'react';
+import { useAuthStore, Transaction } from '../store/authStore';
 import { 
   History, 
-  Filter, 
-  Search, 
-  Download, 
-  Eye, 
-  Calendar,
-  Coins,
-  TrendingUp,
-  TrendingDown,
-  Clock,
-  CheckCircle,
-  XCircle,
-  AlertCircle
+  CheckCircle, 
+  XCircle, 
+  Loader, 
+  AlertCircle,
+  Eye,
+  Edit,
+  RefreshCw
 } from 'lucide-react';
+import Swal from 'sweetalert2';
 
 export const Transactions: React.FC = () => {
-  const { user, transactions } = useAuthStore();
-  const [filter, setFilter] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [dateRange, setDateRange] = useState('all');
+  const { authToken, user } = useAuthStore();
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterType, setFilterType] = useState('all');
+  const [filterUsername, setFilterUsername] = useState('');
 
-  if (!user) return null;
+  const fetchTransactions = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const queryParams = new URLSearchParams({
+        page: currentPage.toString(),
+        ...(filterStatus !== 'all' && { status: filterStatus }),
+        ...(filterType !== 'all' && { type: filterType }),
+        ...(filterUsername && { username: filterUsername }),
+      }).toString();
 
-  const getStatusBadge = (status: string) => {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/transactions?${queryParams}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erreur HTTP: ${response.status}`);
+      }
+
+      const result = await response.json();
+      setTransactions(result.data || []);
+      setLastPage(result.meta.lastPage);
+      setCurrentPage(result.meta.currentPage);
+    } catch (err) {
+      console.error('Erreur lors de la récupération des transactions:', err);
+      setError('Impossible de charger les transactions.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (authToken && user?.role === 'admin') {
+      fetchTransactions();
+    } else if (!user || user.role !== 'admin') {
+      setError('Accès non autorisé. Seuls les administrateurs peuvent voir cette page.');
+      setLoading(false);
+    }
+  }, [authToken, user, currentPage, filterStatus, filterType, filterUsername]);
+
+  const handleUpdateStatus = async (transactionId: string, newStatus: 'Approved' | 'Rejected') => {
+    Swal.fire({
+      title: `Confirmer ${newStatus === 'Approved' ? 'l\'approbation' : 'le rejet'} ?`,
+      text: `Voulez-vous vraiment ${newStatus === 'Approved' ? 'approuver' : 'rejeter'} cette transaction ?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: newStatus === 'Approved' ? '#3085d6' : '#d33',
+      cancelButtonColor: '#888',
+      confirmButtonText: newStatus === 'Approved' ? 'Oui, approuver!' : 'Oui, rejeter!',
+      cancelButtonText: 'Annuler'
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        try {
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/transactions/${transactionId}/status`, {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${authToken}`,
+              'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true'
+            },
+            body: JSON.stringify({ status: newStatus })
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `Erreur HTTP: ${response.status}`);
+          }
+
+          Swal.fire(
+            newStatus === 'Approved' ? 'Approuvée!' : 'Rejetée!',
+            `La transaction a été ${newStatus === 'Approved' ? 'approuvée' : 'rejeter'} avec succès.`, 
+            'success'
+          );
+          fetchTransactions(); // Refresh the list
+        } catch (err: any) {
+          console.error('Erreur lors de la mise à jour du statut:', err);
+          Swal.fire(
+            'Erreur!',
+            err.message || 'Impossible de mettre à jour le statut de la transaction.',
+            'error'
+          );
+        }
+      }
+    });
+  };
+
+  const getStatusBadgeClass = (status: string) => {
     switch (status) {
-      case 'completed':
-        return <div className="badge badge-success gap-1"><CheckCircle className="w-3 h-3" />Confirmé</div>;
-      case 'pending':
-        return <div className="badge badge-warning gap-1"><Clock className="w-3 h-3" />En attente</div>;
-      case 'rejected':
-        return <div className="badge badge-error gap-1"><XCircle className="w-3 h-3" />Rejeté</div>;
-      default:
-        return <div className="badge badge-info gap-1"><AlertCircle className="w-3 h-3" />Inconnu</div>;
+      case 'Approved': return 'badge-success';
+      case 'Rejected': return 'badge-error';
+      case 'Pending': return 'badge-warning';
+      case 'completed': return 'badge-success'; // For existing mock data
+      case 'pending': return 'badge-warning';   // For existing mock data
+      default: return 'badge-neutral';
     }
   };
 
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'deposit':
-        return <TrendingUp className="w-4 h-4 text-success" />;
-      case 'withdrawal':
-        return <TrendingDown className="w-4 h-4 text-error" />;
-      case 'transfer':
-        return <Coins className="w-4 h-4 text-primary" />;
-      default:
-        return <History className="w-4 h-4 text-base-content/50" />;
-    }
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('fr-FR', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
-  const getTypeLabel = (type: string) => {
-    switch (type) {
-      case 'deposit': return 'Dépôt';
-      case 'withdrawal': return 'Retrait';
-      case 'transfer': return 'Transfert';
-      case 'purchase': return 'Achat';
-      case 'affiliate': return 'Commission';
-      default: return type;
-    }
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-base-100 flex items-center justify-center">
+        <div className="text-center">
+          <Loader className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Chargement des transactions...</h2>
+          <p className="text-base-content/70">Récupération des données depuis l'API</p>
+        </div>
+      </div>
+    );
+  }
 
-  const filteredTransactions = transactions.filter(t => {
-    const matchesFilter = filter === 'all' || t.type === filter;
-    const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         t.reference?.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesFilter && matchesSearch;
-  });
-
-  const totalDeposits = transactions
-    .filter(t => t.type === 'deposit' && t.status === 'completed')
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const totalWithdrawals = transactions
-    .filter(t => t.type === 'withdrawal' && t.status === 'completed')
-    .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-
-  const pendingTransactions = transactions.filter(t => t.status === 'pending').length;
+  if (error) {
+    return (
+      <div className="min-h-screen bg-base-100 flex items-center justify-center">
+        <div className="text-center p-4 bg-base-200 rounded-lg shadow-lg">
+          <AlertCircle className="w-12 h-12 text-error mx-auto mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Erreur</h2>
+          <p className="text-base-content/70 mb-4">{error}</p>
+          <button 
+            className="btn btn-primary"
+            onClick={fetchTransactions}
+          >
+            <RefreshCw className="w-5 h-5 mr-2" />
+            Réessayer
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-base-100">
+    <div className="min-h-screen bg-base-100 p-4">
       <div className="container mx-auto px-4 py-8">
-        <div className="max-w-6xl mx-auto">
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold mb-2">Historique des Transactions</h1>
-            <p className="text-base-content/70">Consultez toutes vos transactions et leur statut</p>
-          </div>
+        <h1 className="text-3xl font-bold text-primary mb-6 flex items-center gap-3">
+          <History className="w-8 h-8" />
+          Gestion des Transactions
+        </h1>
 
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div className="stat bg-base-200 rounded-lg shadow-lg">
-              <div className="stat-figure text-success">
-                <TrendingUp className="w-8 h-8" />
+        <div className="card bg-base-200 shadow-xl">
+          <div className="card-body">
+            <h2 className="card-title text-secondary mb-4">Filtres</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="form-control">
+                <label className="label"><span className="label-text">Statut</span></label>
+                <select 
+                  className="select select-bordered w-full"
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                >
+                  <option value="all">Tous</option>
+                  <option value="Pending">En attente</option>
+                  <option value="Completed">Terminé</option>
+                  <option value="Rejected">Rejeté</option>
+                </select>
               </div>
-              <div className="stat-title">Total Dépôts</div>
-              <div className="stat-value text-success">{totalDeposits.toLocaleString()}</div>
-              <div className="stat-desc">coins reçus</div>
+              <div className="form-control">
+                <label className="label"><span className="label-text">Type</span></label>
+                <select 
+                  className="select select-bordered w-full"
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                >
+                  <option value="all">Tous</option>
+                  <option value="Recharge">Recharge</option>
+                  <option value="Withdrawal">Retrait</option>
+                  <option value="Transfer">Transfert</option>
+                  <option value="Purchase">Achat</option>
+                  <option value="Affiliate">Affiliation</option>
+                  <option value="Referral_Bonus">Bonus Parrainage</option>
+                </select>
+              </div>
+              <div className="form-control">
+                <label className="label"><span className="label-text">Nom d'utilisateur</span></label>
+                <input 
+                  type="text" 
+                  placeholder="Rechercher par nom d'utilisateur"
+                  className="input input-bordered w-full"
+                  value={filterUsername}
+                  onChange={(e) => setFilterUsername(e.target.value)}
+                />
+              </div>
             </div>
-            
-            <div className="stat bg-base-200 rounded-lg shadow-lg">
-              <div className="stat-figure text-error">
-                <TrendingDown className="w-8 h-8" />
-              </div>
-              <div className="stat-title">Total Retraits</div>
-              <div className="stat-value text-error">{totalWithdrawals.toLocaleString()}</div>
-              <div className="stat-desc">coins retirés</div>
-            </div>
-            
-            <div className="stat bg-base-200 rounded-lg shadow-lg">
-              <div className="stat-figure text-warning">
-                <Clock className="w-8 h-8" />
-              </div>
-              <div className="stat-title">En Attente</div>
-              <div className="stat-value text-warning">{pendingTransactions}</div>
-              <div className="stat-desc">transactions</div>
-            </div>
-            
-            <div className="stat bg-base-200 rounded-lg shadow-lg">
-              <div className="stat-figure text-primary">
-                <Coins className="w-8 h-8" />
-              </div>
-              <div className="stat-title">Solde Actuel</div>
-              <div className="stat-value text-primary">{user.coins.toLocaleString()}</div>
-              <div className="stat-desc">coins disponibles</div>
-            </div>
-          </div>
-
-          {/* Filters */}
-          <div className="card bg-base-200 shadow-lg mb-6">
-            <div className="card-body">
-              <div className="flex flex-col lg:flex-row gap-4">
-                <div className="form-control flex-1">
-                  <label className="label">
-                    <span className="label-text">Rechercher</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="Référence, description..."
-                      className="input input-bordered w-full pl-10"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                    <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-base-content/50" />
-                  </div>
-                </div>
-                
-                <div className="form-control">
-                  <label className="label">
-                    <span className="label-text">Type</span>
-                  </label>
-                  <select
-                    className="select select-bordered"
-                    value={filter}
-                    onChange={(e) => setFilter(e.target.value)}
-                  >
-                    <option value="all">Tous</option>
-                    <option value="deposit">Dépôts</option>
-                    <option value="withdrawal">Retraits</option>
-                    <option value="transfer">Transferts</option>
-                    <option value="purchase">Achats</option>
-                    <option value="affiliate">Commissions</option>
-                  </select>
-                </div>
-                
-                <div className="form-control">
-                  <label className="label">
-                    <span className="label-text">Période</span>
-                  </label>
-                  <select
-                    className="select select-bordered"
-                    value={dateRange}
-                    onChange={(e) => setDateRange(e.target.value)}
-                  >
-                    <option value="all">Toutes</option>
-                    <option value="today">Aujourd'hui</option>
-                    <option value="week">Cette semaine</option>
-                    <option value="month">Ce mois</option>
-                    <option value="year">Cette année</option>
-                  </select>
-                </div>
-                
-                <div className="form-control">
-                  <label className="label">
-                    <span className="label-text">&nbsp;</span>
-                  </label>
-                  <button className="btn btn-outline">
-                    <Download className="w-4 h-4 mr-2" />
-                    Exporter
-                  </button>
-                </div>
-              </div>
+            <div className="flex justify-end gap-2">
+              <button className="btn btn-primary" onClick={fetchTransactions}>
+                <RefreshCw className="w-4 h-4" /> Appliquer les filtres
+              </button>
+              <button className="btn btn-outline" onClick={() => {
+                setFilterStatus('all');
+                setFilterType('all');
+                setFilterUsername('');
+                setCurrentPage(1); // Reset to first page on filter reset
+              }}>
+                Réinitialiser
+              </button>
             </div>
           </div>
+        </div>
 
-          {/* Transactions Table */}
-          <div className="card bg-base-200 shadow-lg">
-            <div className="card-body">
-              <h3 className="card-title mb-4">
-                <History className="w-6 h-6" />
-                Transactions ({filteredTransactions.length})
-              </h3>
-              
-              <div className="overflow-x-auto">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Type</th>
-                      <th>Description</th>
-                      <th>Référence</th>
-                      <th>Montant</th>
-                      <th>Statut</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredTransactions.map((transaction) => (
+        <div className="card bg-base-200 shadow-xl mt-6">
+          <div className="card-body">
+            <h2 className="card-title text-secondary mb-4">Toutes les Transactions ({transactions.length})</h2>
+            <div className="overflow-x-auto">
+              <table className="table w-full">
+                <thead>
+                  <tr>
+                    <th>ID Transaction</th>
+                    <th>Utilisateur</th>
+                    <th>Type</th>
+                    <th>Montant</th>
+                    <th>Statut</th>
+                    <th>Date</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transactions.length > 0 ? (
+                    transactions.map((transaction) => (
                       <tr key={transaction.id}>
+                        <td><span className="font-mono text-sm">{transaction.id.toString().substring(0, 8)}...</span></td>
+                        <td>{transaction.account?.username || 'N/A'}</td>
+                        <td>{transaction.type}</td>
+                        <td>{parseFloat(transaction.amount).toLocaleString()} coins</td>
                         <td>
-                          <div className="flex items-center gap-2">
-                            <Calendar className="w-4 h-4 text-base-content/50" />
-                            <div>
-                              <div className="font-medium">
-                                {new Date(transaction.createdAt).toLocaleDateString('fr-FR')}
-                              </div>
-                              <div className="text-sm text-base-content/70">
-                                {new Date(transaction.createdAt).toLocaleTimeString('fr-FR', { 
-                                  hour: '2-digit', 
-                                  minute: '2-digit' 
-                                })}
-                              </div>
-                            </div>
+                          <div className={`badge ${getStatusBadgeClass(transaction.status)}`}>
+                            {transaction.status}
                           </div>
                         </td>
+                        <td>{formatDate(transaction.createdAt)}</td>
                         <td>
-                          <div className="flex items-center gap-2">
-                            {getTypeIcon(transaction.type)}
-                            <span className="capitalize">{getTypeLabel(transaction.type)}</span>
-                          </div>
-                        </td>
-                        <td>
-                          <div className="max-w-xs truncate" title={transaction.description}>
-                            {transaction.description}
-                          </div>
-                        </td>
-                        <td>
-                          <div className="font-mono text-sm">
-                            {transaction.reference || '-'}
-                          </div>
-                        </td>
-                        <td>
-                          <div className={`font-bold flex items-center gap-1 ${
-                            transaction.amount > 0 ? 'text-success' : 'text-error'
-                          }`}>
-                            <Coins className="w-4 h-4" />
-                            {transaction.amount > 0 ? '+' : ''}{transaction.amount.toLocaleString()}
-                          </div>
-                        </td>
-                        <td>
-                          {getStatusBadge(transaction.status)}
-                        </td>
-                        <td>
-                          <div className="flex gap-2">
-                            <button className="btn btn-xs btn-outline">
-                              <Eye className="w-3 h-3" />
-                            </button>
-                            {transaction.proof && (
-                              <button className="btn btn-xs btn-primary btn-outline">
-                                <Download className="w-3 h-3" />
+                          {transaction.status === 'Pending' || transaction.status === 'pending' ? (
+                            <div className="flex gap-2">
+                              <button 
+                                className="btn btn-success btn-sm"
+                                onClick={() => handleUpdateStatus(transaction.id, 'Approved')}
+                              >
+                                <CheckCircle className="w-4 h-4" />
+                                Approuver
                               </button>
-                            )}
-                          </div>
+                              <button 
+                                className="btn btn-error btn-sm"
+                                onClick={() => handleUpdateStatus(transaction.id, 'Rejected')}
+                              >
+                                <XCircle className="w-4 h-4" />
+                                Rejeter
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-base-content/70">Statut final</span>
+                          )}
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-                
-                {filteredTransactions.length === 0 && (
-                  <div className="text-center py-8">
-                    <History className="w-16 h-16 mx-auto text-base-content/30 mb-4" />
-                    <p className="text-base-content/70">Aucune transaction trouvée</p>
-                  </div>
-                )}
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={7} className="text-center py-8">
+                        <AlertCircle className="w-12 h-12 mx-auto text-base-content/50 mb-4" />
+                        <p className="text-base-content/70">Aucune transaction trouvée.</p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Controls */}
+            <div className="flex justify-center mt-6">
+              <div className="join">
+                <button 
+                  className="join-item btn"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                >
+                  «
+                </button>
+                <button className="join-item btn">Page {currentPage} / {lastPage}</button>
+                <button 
+                  className="join-item btn"
+                  onClick={() => setCurrentPage(prev => Math.min(lastPage, prev + 1))}
+                  disabled={currentPage === lastPage}
+                >
+                  »
+                </button>
               </div>
             </div>
           </div>
