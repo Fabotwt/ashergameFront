@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { 
   Users, 
@@ -14,19 +14,21 @@ import {
 } from 'lucide-react';
 
 export const Affiliates: React.FC = () => {
-  const { user, affiliates, affiliateEarnings } = useAuthStore();
+  const { user, affiliateStats, fetchAffiliateStats } = useAuthStore();
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    fetchAffiliateStats();
+  }, [fetchAffiliateStats]);
 
   if (!user) return null;
 
-  const referralLink = `https://ashergame.com/register?ref=${user.id}`;
+  const referralLink = `https://ashergame.online/register?ref=${user.username}`;
   
-  const totalEarnings = affiliateEarnings.reduce((sum, earning) => sum + earning.amount, 0);
-  const totalAffiliates = affiliates.length;
-  const activeAffiliates = affiliates.filter(a => a.status === 'active').length;
-  const thisMonthEarnings = affiliateEarnings
-    .filter(e => new Date(e.createdAt).getMonth() === new Date().getMonth())
-    .reduce((sum, earning) => sum + earning.amount, 0);
+  const totalEarnings = affiliateStats?.totalEarnings || 0;
+  const totalAffiliates = affiliateStats?.referredUsersCount || 0;
+  const commissionTransactions = affiliateStats?.commissionTransactions || [];
+  const referredUsers = affiliateStats?.referredUsers || [];
 
   const copyReferralLink = () => {
     navigator.clipboard.writeText(referralLink);
@@ -62,7 +64,6 @@ export const Affiliates: React.FC = () => {
               </div>
               <div className="stat-title">Total Affiliés</div>
               <div className="stat-value text-primary">{totalAffiliates}</div>
-              <div className="stat-desc">{activeAffiliates} actifs</div>
             </div>
             
             <div className="stat bg-base-200 rounded-lg shadow-lg">
@@ -79,8 +80,8 @@ export const Affiliates: React.FC = () => {
                 <TrendingUp className="w-8 h-8" />
               </div>
               <div className="stat-title">Ce Mois</div>
-              <div className="stat-value text-secondary">{thisMonthEarnings.toLocaleString()}</div>
-              <div className="stat-desc">coins ce mois</div>
+              <div className="stat-value text-secondary">{totalEarnings.toLocaleString()}</div>
+              <div className="stat-desc">Total des gains</div>
             </div>
             
             <div className="stat bg-base-200 rounded-lg shadow-lg">
@@ -155,41 +156,31 @@ export const Affiliates: React.FC = () => {
               <div className="card-body">
                 <h3 className="card-title mb-4">
                   <Users className="w-6 h-6" />
-                  Mes Affiliés ({affiliates.length})
+                  Mes Affiliés ({referredUsers.length})
                 </h3>
                 
                 <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {affiliates.map((affiliate) => (
+                  {referredUsers.map((affiliate) => (
                     <div key={affiliate.id} className="flex items-center justify-between p-3 bg-base-100 rounded-lg">
                       <div className="flex items-center gap-3">
                         <div className="avatar">
                           <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center">
                             <span className="text-white font-bold text-sm">
-                              {affiliate.name.charAt(0).toUpperCase()}
+                              {affiliate.name ? affiliate.name.charAt(0).toUpperCase() : 'A'}
                             </span>
                           </div>
                         </div>
                         <div>
-                          <div className="font-medium">{affiliate.name}</div>
+                          <div className="font-medium">{affiliate.name || 'Utilisateur Anonyme'}</div>
                           <div className="text-sm text-base-content/70">
-                            Inscrit le {new Date(affiliate.joinedAt).toLocaleDateString('fr-FR')}
+                            Inscrit le {new Date(affiliate.createdAt).toLocaleDateString('fr-FR')}
                           </div>
                         </div>
-                      </div>
-                      <div className="text-right">
-                        <div className={`badge ${affiliate.status === 'active' ? 'badge-success' : 'badge-warning'}`}>
-                          {affiliate.status === 'active' ? 'Actif' : 'En attente'}
-                        </div>
-                        {affiliate.firstDepositAmount && (
-                          <div className="text-sm text-base-content/70 mt-1">
-                            1er dépôt: {affiliate.firstDepositAmount.toLocaleString()} coins
-                          </div>
-                        )}
                       </div>
                     </div>
                   ))}
                   
-                  {affiliates.length === 0 && (
+                  {referredUsers.length === 0 && (
                     <div className="text-center py-8">
                       <UserPlus className="w-16 h-16 mx-auto text-base-content/30 mb-4" />
                       <p className="text-base-content/70">Aucun affilié pour le moment</p>
@@ -211,14 +202,14 @@ export const Affiliates: React.FC = () => {
                 </h3>
                 
                 <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {affiliateEarnings.map((earning) => (
+                  {commissionTransactions.map((earning) => (
                     <div key={earning.id} className="flex items-center justify-between p-3 bg-base-100 rounded-lg">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-success/20 rounded-full flex items-center justify-center">
                           <Coins className="w-5 h-5 text-success" />
                         </div>
                         <div>
-                          <div className="font-medium">Commission de {earning.affiliateName}</div>
+                          <div className="font-medium">{earning.description}</div>
                           <div className="text-sm text-base-content/70 flex items-center gap-1">
                             <Calendar className="w-3 h-3" />
                             {new Date(earning.createdAt).toLocaleDateString('fr-FR')}
@@ -229,14 +220,11 @@ export const Affiliates: React.FC = () => {
                         <div className="font-bold text-success">
                           +{earning.amount.toLocaleString()} coins
                         </div>
-                        <div className="text-xs text-base-content/70">
-                          20% de {(earning.amount * 5).toLocaleString()}
-                        </div>
                       </div>
                     </div>
                   ))}
                   
-                  {affiliateEarnings.length === 0 && (
+                  {commissionTransactions.length === 0 && (
                     <div className="text-center py-8">
                       <Coins className="w-16 h-16 mx-auto text-base-content/30 mb-4" />
                       <p className="text-base-content/70">Aucun gain pour le moment</p>

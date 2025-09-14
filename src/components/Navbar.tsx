@@ -23,7 +23,9 @@ export const Navbar: React.FC = () => {
       
       <div className="navbar-center hidden lg:flex">
         <ul className="menu menu-horizontal px-1">
-          <li><Link to="/" className="text-base-content hover:text-primary">Accueil</Link></li>
+          {!isAuthenticated && (
+            <li><Link to="/" className="text-base-content hover:text-primary">Accueil</Link></li>
+          )}
           {isAuthenticated && (
             <>
               <li><Link to="/dashboard" className="text-base-content hover:text-primary">Dashboard</Link></li>
@@ -36,7 +38,16 @@ export const Navbar: React.FC = () => {
                 </>
               )}
               {user?.role === 'admin' && (
-                <li><Link to="/admin/users" className="text-base-content hover:text-primary">Utilisateurs</Link></li>
+                <>
+                  <li><Link to="/admin/users" className="text-base-content hover:text-primary">Utilisateurs</Link></li>
+                  <li><Link to="/admin/settings" className="text-base-content hover:text-primary">Paramètres</Link></li>
+                  <li><Link to="/admin/games" className="text-base-content hover:text-primary">Jeux</Link></li>
+                </>
+              )}
+              {user?.role === 'cashier' && (
+                <>
+                  <li><Link to="/recharge" className="text-base-content hover:text-primary">Recharge USDT</Link></li>
+                </>
               )}
             </>
           )}
@@ -93,13 +104,47 @@ export const Navbar: React.FC = () => {
                   </li>
                 </>
               )}
+              {user.role === 'cashier' && (
+                <>
+                  <li>
+                    <Link to="/recharge">
+                      <Wallet className="w-4 h-4" />
+                      Recharge USDT
+                    </Link>
+                  </li>
+                </>
+              )}
               {user.role === 'admin' && (
-                <li>
-                  <Link to="/admin/users">
-                    <Users className="w-4 h-4" />
-                    Utilisateurs
-                  </Link>
-                </li>
+                <>
+                  <li>
+                    <Link to="/admin/users">
+                      <Users className="w-4 h-4" />
+                      Utilisateurs
+                    </Link>
+                  </li>
+                  <li>
+                    <Link to="/admin/settings">
+                      <Users className="w-4 h-4" />
+                      Paramètres
+                    </Link>
+                  </li>
+                  <li>
+                    <Link to="/admin/games">
+                      <Gamepad2 className="w-4 h-4" />
+                      Jeux
+                    </Link>
+                  </li>
+                  <li>
+                    <a href="https://hostinger.titan.email/mail/" target="_blank" rel="noopener noreferrer">
+                      Webmail
+                    </a>
+                  </li>
+                  <li>
+                    <a href="https://admin.ashergame.online" target="_blank" rel="noopener noreferrer">
+                      Jeu Admin
+                    </a>
+                  </li>
+                </>
               )}
               <div className="divider my-1"></div>
               <li><button onClick={handleLogout} className="text-error"><LogOut className="w-4 h-4" />Déconnexion</button></li>
@@ -107,8 +152,8 @@ export const Navbar: React.FC = () => {
           </div>
         ) : (
           <div className="flex gap-2">
-            <Link to="/login" className="btn btn-ghost">Connexion</Link>
-            <Link to="/register" className="btn btn-primary">Inscription</Link>
+            {/* <Link to="/login" className="btn btn-ghost"></Link> */}
+            <Link to="/login" className="btn btn-primary">Connexion</Link>
           </div>
         )}
       </div>

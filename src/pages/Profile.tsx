@@ -32,8 +32,11 @@ export const Profile: React.FC = () => {
 
   // Récupérer les données utilisateur au chargement
   useEffect(() => {
-    fetchCurrentUser();
-  }, [fetchCurrentUser]);
+    if (!user) {
+      fetchCurrentUser();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   // Mettre à jour le formulaire quand les données utilisateur changent
   useEffect(() => {
@@ -451,7 +454,7 @@ export const Profile: React.FC = () => {
               </div>
 
               {/* Account Settings */}
-              <div className="card bg-base-200 shadow-lg">
+              {/* <div className="card bg-base-200 shadow-lg">
                 <div className="card-body">
                   <h3 className="card-title mb-6">
                     <Settings className="w-6 h-6" />
@@ -498,10 +501,10 @@ export const Profile: React.FC = () => {
                     </button>
                   </div>
                 </div>
-              </div>
+              </div> */}
 
               {/* Recent Activity */}
-              <div className="card bg-base-200 shadow-lg">
+              {/* <div className="card bg-base-200 shadow-lg">
                 <div className="card-body">
                   <h3 className="card-title mb-6">
                     <History className="w-6 h-6" />
@@ -542,7 +545,7 @@ export const Profile: React.FC = () => {
                     </div>
                   </div>
                 </div>
-              </div>
+              </div> */}
             </div>
           </div>
         </div>

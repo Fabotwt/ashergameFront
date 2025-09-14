@@ -1,5 +1,5 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
@@ -13,10 +13,30 @@ import { Affiliates } from './pages/Affiliates';
 import { DirectRecharge } from './pages/DirectRecharge';
 import { Withdrawal } from './pages/Withdrawal';
 import { AdminUsers } from './pages/AdminUsers';
+import { Settings } from './pages/Settings';
+import { AdminGames } from './pages/AdminGames';
+import RefundPolicy from './pages/RefundPolicy';
+import TermsAndConditions from './pages/TermsAndConditions';
+import { ForgotPassword } from './pages/ForgotPassword';
+import { ResetPassword } from './pages/ResetPassword';
+import { Games } from './pages/Games';
+import { GameDetail } from './pages/GameDetail';
+import { Toaster, toast } from 'react-hot-toast';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode, roles?: string[] }> = ({ children, roles }) => {
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user, isLoadingAuth } = useAuthStore();
   
+  if (isLoadingAuth) {
+    return (
+      <div className="min-h-screen bg-base-100 flex items-center justify-center">
+        <div className="text-center">
+          <span className="loading loading-spinner loading-lg text-primary"></span>
+          <h2 className="text-xl font-semibold mt-4">Chargement de l'authentification...</h2>
+        </div>
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     return <Navigate to="/login" />;
   }
@@ -28,16 +48,87 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode, roles?: string[] }> 
   return <>{children}</>;
 };
 
+const GuestRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isAuthenticated, isLoadingAuth } = useAuthStore();
+
+  if (isLoadingAuth) {
+    return (
+      <div className="min-h-screen bg-base-100 flex items-center justify-center">
+        <div className="text-center">
+          <span className="loading loading-spinner loading-lg text-primary"></span>
+        </div>
+      </div>
+    );
+  }
+
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+const AuthRedirector: React.FC = () => {
+  const { user, logout, isAuthenticated } = useAuthStore();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isAuthenticated && user && user.enabled === false) {
+      toast.error('Votre compte a été désactivé. Veuillez contacter le support.', { duration: 6000 });
+      logout();
+      navigate('/login');
+    }
+  }, [user, isAuthenticated, logout, navigate]);
+
+  return null; // This component does not render anything
+}
+
 function App() {
   return (
     <Router>
+      <AuthRedirector />
+      <Toaster 
+        position="top-right"
+        reverseOrder={false}
+        toastOptions={{
+          // Define default options
+          className: '',
+          duration: 5000,
+          style: {
+            background: '#363636',
+            color: '#fff',
+            border: '1px solid #4b4b4b',
+          },
+          // Default options for specific types
+          success: {
+            duration: 3000,
+            theme: {
+              primary: 'green',
+              secondary: 'black',
+            },
+          },
+          error: {
+            duration: 5000,
+          },
+        }}
+      />
       <div className="min-h-screen bg-base-100 flex flex-col">
         <Navbar />
         <main className="flex-1">
           <Routes>
-            <Route path="/" element={<Landing />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
+            <Route path="/" element={<GuestRoute><Landing /></GuestRoute>} />
+            <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
+            <Route path="/register" element={<GuestRoute><Register /></GuestRoute>} />
+            <Route path="/forgot-password" element={<GuestRoute><ForgotPassword /></GuestRoute>} />
+            <Route path="/reset-password" element={<GuestRoute><ResetPassword /></GuestRoute>} />
+
+            {/* Public routes that are always accessible */}
+            <Route path="/refund-policy" element={<RefundPolicy />} />
+            <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
+            <Route path="/games" element={<Games />} />
+            <Route path="/games/:id" element={<GameDetail />} />
+
+            {/* Protected Routes */}
             <Route 
               path="/dashboard" 
               element={
@@ -73,7 +164,7 @@ function App() {
             <Route 
               path="/recharge" 
               element={
-                <ProtectedRoute roles={['player']}>
+                <ProtectedRoute roles={['player', 'cashier']}>
                   <DirectRecharge />
                 </ProtectedRoute>
               } 
@@ -91,6 +182,22 @@ function App() {
               element={
                 <ProtectedRoute roles={['admin']}>
                   <AdminUsers />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/admin/settings" 
+              element={
+                <ProtectedRoute roles={['admin']}>
+                  <Settings />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/admin/games" 
+              element={
+                <ProtectedRoute roles={['admin']}>
+                  <AdminGames />
                 </ProtectedRoute>
               } 
             />

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
+import toast from 'react-hot-toast';
 import { 
   Coins, 
   Users, 
@@ -32,7 +33,8 @@ import {
   UserCheck,
   UserX,
   Crown,
-  AlertCircle
+  AlertCircle,
+  Gift
 } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
@@ -45,6 +47,7 @@ export const Dashboard: React.FC = () => {
     updateUserCoins, 
     fetchCurrentUser, 
     isLoadingUser,
+    isLoadingAuth,
     // Nouvelles fonctions admin
     adminUsers,
     adminStats,
@@ -53,7 +56,13 @@ export const Dashboard: React.FC = () => {
     fetchAdminStats,
     toggleUserStatus,
     toggleUserRole,
-    rechargeCashier
+    rechargeCashier,
+    rechargePlayer,
+    rechargePlayerByCashier,
+    cashierStats,
+    fetchCashierStats,
+    playerStats,
+    fetchPlayerStats
   } = useAuthStore();
   
   const [rechargeAmount, setRechargeAmount] = useState('');
@@ -74,23 +83,26 @@ export const Dashboard: React.FC = () => {
     players: ''
   });
 
-  // Récupérer les données utilisateur au chargement du dashboard
   useEffect(() => {
-    console.log('Dashboard monté, récupération des données utilisateur...');
-    fetchCurrentUser();
-  }, [fetchCurrentUser]);
+    if (!user && !isLoadingUser && !isLoadingAuth) {
+      fetchCurrentUser();
+    }
+  }, [user, isLoadingUser, isLoadingAuth, fetchCurrentUser]);
 
-  // Récupérer les données admin si l'utilisateur est admin
+  // Récupérer les données admin ou caissier
   useEffect(() => {
-    if (user && user.role === 'admin') {
-      console.log('🔄 Chargement des données admin...');
+    if (user?.role === 'admin') {
       fetchActiveUsers();
       fetchAdminStats();
+    } else if (user?.role === 'cashier') {
+      fetchCashierStats();
+    } else if (user?.role === 'player') {
+      fetchPlayerStats();
     }
-  }, [user, fetchActiveUsers, fetchAdminStats]);
+  }, [user, fetchActiveUsers, fetchAdminStats, fetchCashierStats]);
 
   // Afficher un loader pendant le chargement des données utilisateur
-  if (isLoadingUser) {
+  if (isLoadingUser || isLoadingAuth) {
     return (
       <div className="min-h-screen bg-base-100 flex items-center justify-center">
         <div className="text-center">
@@ -121,32 +133,43 @@ export const Dashboard: React.FC = () => {
 
   const handleRecharge = async (type: 'usdt' | 'cashier') => {
     setLoading(true);
-    setTimeout(() => {
-      const amount = parseInt(rechargeAmount);
-      if (amount > 0) {
-        updateCoins(amount);
-        setRechargeAmount('');
-        setTargetUsername('');
-        setUsdtAddress('');
+    setNotification(null);
+    try {
+      if (type === 'usdt') {
+        // Assuming createRechargeRequest handles the API call
+        // This part needs to be properly integrated with the actual form data for USDT recharge
+        // For now, it's a placeholder as the USDT recharge form is in DirectRecharge.tsx
+        setNotification({ type: 'success', message: 'USDT Recharge initiated (simulated)' });
+      } else if (type === 'cashier') {
+        // This case is handled by handleRechargeCashier or handleRechargePlayer
+        setNotification({ type: 'error', message: 'Invalid recharge type' });
       }
+    } catch (error: any) {
+      setNotification({ type: 'error', message: error.message || 'Recharge failed' });
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
   const handleTransfer = async () => {
     setLoading(true);
-    setTimeout(() => {
+    setNotification(null);
+    try {
       const amount = parseInt(rechargeAmount);
-      if (amount > 0 && amount <= user.coins) {
-        updateCoins(-amount);
-        if (targetUsername) {
-          updateUserCoins(targetUsername, amount);
-        }
-        setRechargeAmount('');
-        setTargetUsername('');
+      if (amount <= 0) {
+        setNotification({ type: 'error', message: 'Montant invalide' });
+        return;
       }
+      // Assuming there's an API for player-to-player transfer
+      // For now, this is a placeholder
+      setNotification({ type: 'success', message: `Transfer of ${amount} coins to ${targetUsername} (simulated)` });
+      setRechargeAmount('');
+      setTargetUsername('');
+    } catch (error: any) {
+      setNotification({ type: 'error', message: error.message || 'Transfer failed' });
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
   const handleAddGame = () => {
@@ -223,6 +246,27 @@ export const Dashboard: React.FC = () => {
       setTargetUsername('');
     } else {
       console.error('Erreur lors de la recharge du caissier');
+    }
+    setLoading(false);
+  };
+
+  const handleRechargePlayer = async () => {
+    setLoading(true);
+    const amount = parseInt(rechargeAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('Veuillez entrer un montant valide.');
+      setLoading(false);
+      return;
+    }
+
+    const result = await rechargePlayerByCashier(targetUsername, amount);
+    
+    if (result.success) {
+      toast.success(result.message || 'Joueur rechargé avec succès !');
+      setRechargeAmount('');
+      setTargetUsername('');
+    } else {
+      toast.error(result.message || 'Erreur lors de la recharge.');
     }
     setLoading(false);
   };
@@ -305,17 +349,17 @@ export const Dashboard: React.FC = () => {
             <CreditCard className="w-8 h-8" />
           </div>
           <div className="stat-title">Transactions</div>
-          <div className="stat-value text-secondary">12</div>
+          <div className="stat-value text-secondary">{playerStats?.transactionsCount || 0}</div>
           <div className="stat-desc">Ce mois-ci</div>
         </div>
         
         <div className="stat bg-base-200 rounded-lg shadow-lg">
           <div className="stat-figure text-accent">
-            <TrendingUp className="w-8 h-8" />
+            <Users className="w-8 h-8" />
           </div>
-          <div className="stat-title">Jeux joués</div>
-          <div className="stat-value text-accent">8</div>
-          <div className="stat-desc">Cette semaine</div>
+          <div className="stat-title">Mes Filleuls</div>
+          <div className="stat-value text-accent">{playerStats?.referralsCount || 0}</div>
+          <div className="stat-desc">Total</div>
         </div>
       </div>
 
@@ -403,45 +447,35 @@ export const Dashboard: React.FC = () => {
 
       {/* Recharge Options */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* USDT Recharge */}
-        <div className="card bg-base-200 shadow-lg">
+        {/* Referral Card */}
+        <div className="card bg-gradient-to-br from-primary to-secondary text-primary-content shadow-lg">
           <div className="card-body">
-            <h3 className="card-title text-primary">
-              <Wallet className="w-6 h-6" />
-              Recharge USDT
+            <h3 className="card-title">
+              <Gift className="w-6 h-6" />
+              Programme de Parrainage
             </h3>
-            <div className="space-y-4">
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">Montant (coins)</span>
-                </label>
-                <input
-                  type="number"
-                  placeholder="1000"
-                  className="input input-bordered"
-                  value={rechargeAmount}
-                  onChange={(e) => setRechargeAmount(e.target.value)}
-                />
-              </div>
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">Adresse USDT (TRC20/BEP20)</span>
-                </label>
+            <p>Invitez vos amis et gagnez des commissions sur leur premier dépôt ! Partagez votre nom d'utilisateur comme code de parrainage.</p>
+            <div className="form-control mt-2">
+              <label className="label">
+                <span className="label-text text-primary-content/80">Votre code de parrainage</span>
+              </label>
+              <div className="join">
                 <input
                   type="text"
-                  placeholder="Votre adresse USDT"
-                  className="input input-bordered"
-                  value={usdtAddress}
-                  onChange={(e) => setUsdtAddress(e.target.value)}
+                  value={user.username || ''}
+                  className="input input-bordered join-item flex-1 font-mono"
+                  readOnly
                 />
+                <button
+                  className="btn btn-neutral join-item"
+                  onClick={() => {
+                    navigator.clipboard.writeText(user.username || '');
+                    toast.success('Code de parrainage copié !');
+                  }}
+                >
+                  Copier
+                </button>
               </div>
-              <button
-                className={`btn btn-primary w-full ${loading ? 'loading' : ''}`}
-                onClick={() => handleRecharge('usdt')}
-                disabled={!rechargeAmount || !usdtAddress || loading}
-              >
-                Recharger via USDT
-              </button>
             </div>
           </div>
         </div>
@@ -530,7 +564,7 @@ export const Dashboard: React.FC = () => {
   const renderCashierDashboard = () => (
     <div className="space-y-6">
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="stat bg-base-200 rounded-lg shadow-lg">
           <div className="stat-figure text-primary">
             <Coins className="w-8 h-8" />
@@ -541,20 +575,11 @@ export const Dashboard: React.FC = () => {
         </div>
         
         <div className="stat bg-base-200 rounded-lg shadow-lg">
-          <div className="stat-figure text-secondary">
-            <Users className="w-8 h-8" />
-          </div>
-          <div className="stat-title">Joueurs rechargés</div>
-          <div className="stat-value text-secondary">45</div>
-          <div className="stat-desc">Ce mois-ci</div>
-        </div>
-        
-        <div className="stat bg-base-200 rounded-lg shadow-lg">
           <div className="stat-figure text-accent">
             <Send className="w-8 h-8" />
           </div>
           <div className="stat-title">Transactions</div>
-          <div className="stat-value text-accent">128</div>
+          <div className="stat-value text-accent">{cashierStats?.transactionsCount || 0}</div>
           <div className="stat-desc">Total</div>
         </div>
         
@@ -563,7 +588,7 @@ export const Dashboard: React.FC = () => {
             <TrendingUp className="w-8 h-8" />
           </div>
           <div className="stat-title">Commission</div>
-          <div className="stat-value text-success">2.5%</div>
+          <div className="stat-value text-success">{cashierStats?.commissionRate || 0}%</div>
           <div className="stat-desc">Taux actuel</div>
         </div>
       </div>
@@ -660,11 +685,11 @@ export const Dashboard: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="form-control">
               <label className="label">
-                <span className="label-text">ID du joueur</span>
+                <span className="label-text">Nom d'utilisateur du joueur</span>
               </label>
               <input
                 type="text"
-                placeholder="ID du compte joueur"
+                placeholder="Nom d'utilisateur du joueur"
                 className="input input-bordered"
                 value={targetUsername}
                 onChange={(e) => setTargetUsername(e.target.value)}
@@ -688,8 +713,8 @@ export const Dashboard: React.FC = () => {
               </label>
               <button
                 className={`btn btn-primary ${loading ? 'loading' : ''}`}
-                onClick={handleTransfer}
-                disabled={!targetUserId || !rechargeAmount || loading}
+                onClick={handleRechargePlayer}
+                disabled={!targetUsername || !rechargeAmount || loading}
               >
                 Recharger
               </button>
@@ -803,7 +828,7 @@ export const Dashboard: React.FC = () => {
             {user.enabled && (
               <div className="badge badge-success gap-2">
                 <CheckCircle className="w-3 h-3" />
-                Compte Activé
+                Activé
               </div>
             )}
           </h3>
@@ -884,7 +909,7 @@ export const Dashboard: React.FC = () => {
         >
           Vue d'ensemble
         </button>
-        <button 
+        {/* <button 
           className={`tab ${activeTab === 'games' ? 'tab-active' : ''}`}
           onClick={() => setActiveTab('games')}
         >
@@ -895,13 +920,13 @@ export const Dashboard: React.FC = () => {
           onClick={() => setActiveTab('users')}
         >
           Gestion des Utilisateurs
-        </button>
-        <button 
+        </button> */}
+        {/* <button 
           className={`tab ${activeTab === 'transactions' ? 'tab-active' : ''}`}
           onClick={() => setActiveTab('transactions')}
         >
           Gestion des Transactions
-        </button>
+        </button> */}
       </div>
 
       {/* Tab Content */}
@@ -1326,9 +1351,9 @@ export const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {activeTab === 'transactions' && (
+      {/* {activeTab === 'transactions' && (
         <Transactions />
-      )}
+      )} */}
     </div>
   );
 
@@ -1370,7 +1395,7 @@ export const Dashboard: React.FC = () => {
         {user.role === 'admin' && renderAdminDashboard()}
 
         {/* Recent Transactions */}
-        <div className="mt-8">
+        {/* <div className="mt-8">
           <div className="card bg-base-200 shadow-lg">
             <div className="card-body">
               <h3 className="card-title">
@@ -1411,7 +1436,7 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
+        </div> */}
       </div>
     </div>
   );

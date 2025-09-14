@@ -25,9 +25,13 @@ export interface User {
 export interface Game {
   id: string;
   name: string;
-  category: string;
+  slug: string;
+  video: string;
   image: string;
+  link: string;
+  apk: string;
   description: string;
+  category: string;
   rating: number;
   players: string;
 }
@@ -123,6 +127,11 @@ export interface AdminStats {
   totalAdmins: number;
 }
 
+export interface PlayerStats {
+  transactionsCount: number;
+  referralsCount: number;
+}
+
 // 🆕 Interface pour la pagination API
 export interface PaginationMeta {
   total: number;
@@ -141,16 +150,20 @@ interface AuthState {
   users: User[];
   adminUsers: User[]; // Liste des utilisateurs récupérés via API admin
   adminStats: AdminStats | null; // Statistiques admin
+  cashierStats: CashierStats | null;
+  playerStats: PlayerStats | null;
   usersPagination: PaginationMeta | null; // 🆕 Métadonnées de pagination
   games: Game[];
   transactions: Transaction[];
   affiliates: Affiliate[];
   affiliateEarnings: AffiliateEarning[];
   cashierRequests: CashierRequest[];
+  affiliateStats: { referredUsers: User[], commissionTransactions: Transaction[], referredUsersCount: number, totalEarnings: number } | null;
   isAuthenticated: boolean;
   authToken: string | null;
   isLoadingUser: boolean;
   isLoadingAdminData: boolean;
+  isLoadingAuth: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   register: (email: string, password: string, name: string, role: UserRole, phone?: string, country?: string, referralCode?: string) => Promise<boolean>;
   logout: () => void;
@@ -172,176 +185,15 @@ interface AuthState {
   rejectCashierRequest: (requestId: string, reviewNotes?: string) => Promise<void>;
   createCashier: (cashierData: any) => Promise<void>;
   rechargeCashier: (username: string, amount: number) => Promise<boolean>;
+  rechargePlayer: (username: string, amount: number) => Promise<{success: boolean, message: string}>;
+  fetchAffiliateStats: () => Promise<void>;
+  fetchCashierStats: () => Promise<void>;
+  fetchPlayerStats: () => Promise<void>;
+  requestWithdrawal: (amount: number, network: string, address: string) => Promise<{ success: boolean, message: string }>;
 }
 
 // Mock users for demo
-const mockUsers: User[] = [
-  { id: '1', email: 'admin@ashergame.com', name: 'Admin', role: 'admin', coins: 10000, phone: '+33123456789', country: 'FR' },
-  { id: '2', email: 'cashier@ashergame.com', name: 'Caissier', role: 'cashier', coins: 5000, phone: '+33987654321', country: 'FR' },
-  { id: '3', email: 'player@ashergame.com', name: 'Joueur', role: 'player', coins: 1000, phone: '+33456789123', country: 'FR' },
-  { id: '4', email: 'player2@ashergame.com', name: 'Marie Dubois', role: 'player', coins: 2500, phone: '+33789123456', country: 'BE' },
-  { id: '5', email: 'cashier2@ashergame.com', name: 'Ahmed Ben Ali', role: 'cashier', coins: 7500, phone: '+33321654987', country: 'MA' },
-];
 
-// Mock games for demo
-const mockGames: Game[] = [
-  {
-    id: '1',
-    name: 'Mobile Legends',
-    category: 'MOBA',
-    image: 'https://images.pexels.com/photos/442576/pexels-photo-442576.jpeg',
-    description: 'Le MOBA mobile le plus populaire au monde',
-    rating: 4.8,
-    players: '100M+'
-  },
-  {
-    id: '2',
-    name: 'PUBG Mobile',
-    category: 'Battle Royale',
-    image: 'https://images.pexels.com/photos/3165335/pexels-photo-3165335.jpeg',
-    description: 'Battle royale intense avec 100 joueurs',
-    rating: 4.7,
-    players: '50M+'
-  },
-  {
-    id: '3',
-    name: 'Free Fire',
-    category: 'Battle Royale',
-    image: 'https://images.pexels.com/photos/1293261/pexels-photo-1293261.jpeg',
-    description: 'Action rapide en 10 minutes maximum',
-    rating: 4.6,
-    players: '80M+'
-  }
-];
-
-// Mock transactions
-const mockTransactions: Transaction[] = [
-  {
-    id: '1',
-    userId: '3',
-    type: 'deposit',
-    amount: 1000,
-    description: 'Recharge USDT TRC20',
-    status: 'completed',
-    reference: 'TXN001',
-    network: 'TRC20',
-    createdAt: '2025-01-15T14:30:00Z'
-  },
-  {
-    id: '2',
-    userId: '3',
-    type: 'purchase',
-    amount: -50,
-    description: 'Achat Mobile Legends - Skin',
-    status: 'completed',
-    reference: 'PUR001',
-    createdAt: '2025-01-14T09:15:00Z'
-  },
-  {
-    id: '3',
-    userId: '3',
-    type: 'affiliate',
-    amount: 200,
-    description: 'Commission parrainage - Marie Dubois',
-    status: 'completed',
-    reference: 'AFF001',
-    createdAt: '2025-01-13T16:45:00Z'
-  },
-  {
-    id: '4',
-    userId: '3',
-    type: 'referral_bonus',
-    amount: 500,
-    description: 'Bonus de parrainage - Code WELCOME50',
-    status: 'completed',
-    reference: 'REF001',
-    createdAt: '2025-01-15T10:00:00Z'
-  },
-  {
-    id: '5',
-    userId: '3',
-    type: 'deposit',
-    amount: 500,
-    description: 'Recharge par caissier',
-    status: 'completed',
-    reference: 'CSH001',
-    createdAt: '2025-01-12T11:20:00Z'
-  },
-  {
-    id: '6',
-    userId: '3',
-    type: 'deposit',
-    amount: 2000,
-    description: 'Recharge USDT BEP20',
-    status: 'pending',
-    reference: 'TXN002',
-    network: 'BEP20',
-    createdAt: '2025-01-15T18:00:00Z'
-  },
-  {
-    id: '7',
-    userId: '3',
-    type: 'withdrawal',
-    amount: -500,
-    description: 'Retrait USDT TRC20',
-    status: 'pending',
-    reference: 'WTH001',
-    network: 'TRC20',
-    recipientAddress: 'TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE',
-    fee: 1,
-    createdAt: '2025-01-15T20:00:00Z'
-  }
-];
-
-// Mock affiliates
-const mockAffiliates: Affiliate[] = [
-  {
-    id: '1',
-    name: 'Marie Dubois',
-    email: 'marie@example.com',
-    joinedAt: '2025-01-10T10:00:00Z',
-    status: 'active',
-    firstDepositAmount: 1000
-  },
-  {
-    id: '2',
-    name: 'Pierre Martin',
-    email: 'pierre@example.com',
-    joinedAt: '2025-01-12T15:30:00Z',
-    status: 'active',
-    firstDepositAmount: 500
-  },
-  {
-    id: '3',
-    name: 'Sophie Leroy',
-    email: 'sophie@example.com',
-    joinedAt: '2025-01-14T09:15:00Z',
-    status: 'pending'
-  }
-];
-
-// Mock affiliate earnings
-const mockAffiliateEarnings: AffiliateEarning[] = [
-  {
-    id: '1',
-    affiliateId: '1',
-    affiliateName: 'Marie Dubois',
-    amount: 200,
-    originalAmount: 1000,
-    createdAt: '2025-01-10T12:00:00Z'
-  },
-  {
-    id: '2',
-    affiliateId: '2',
-    affiliateName: 'Pierre Martin',
-    amount: 100,
-    originalAmount: 500,
-    createdAt: '2025-01-12T16:00:00Z'
-  }
-];
-
-// Valid referral codes for demo
-const validReferralCodes = ['ASHERGAME2025', 'WELCOME50', 'BONUS100', 'FRIEND20'];
 
 // Helper function to map API role to UserRole
 const mapApiRoleToUserRole = (apiRole?: string): UserRole => {
@@ -417,19 +269,22 @@ const mapApiUserToUser = (apiUser: any, apiAccount?: any): User => {
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
-  users: mockUsers,
+  users: [],
   adminUsers: [],
   adminStats: null,
+  cashierStats: null,
   usersPagination: null, // 🆕 Initialisation pagination
-  games: mockGames,
-  transactions: mockTransactions,
-  affiliates: mockAffiliates,
-  affiliateEarnings: mockAffiliateEarnings,
+  games: [],
+  transactions: [],
+  affiliates: [],
+  affiliateEarnings: [],
   cashierRequests: [],
+  affiliateStats: null,
   isAuthenticated: false,
   authToken: localStorage.getItem('authToken'),
   isLoadingUser: false,
   isLoadingAdminData: false,
+  isLoadingAuth: !!localStorage.getItem('authToken'),
   
   login: async (email: string, password: string) => {
     try {
@@ -441,36 +296,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return false;
       }
 
-      // Pour la démo, utiliser les utilisateurs mock basés sur l'email
-      // Dans une vraie app, vous feriez une requête API pour récupérer les données utilisateur
-      const user = mockUsers.find(u => u.email === email);
-      
-      if (user) {
-        set({ 
-          user, 
-          isAuthenticated: true, 
-          authToken 
-        });
-        return true;
-      } else {
-        // Si l'utilisateur n'est pas dans les mocks, créer un utilisateur basique
-        // En production, vous récupéreriez les données depuis l'API
-        const newUser: User = {
-          id: Date.now().toString(),
-          email,
-          name: email.split('@')[0], // Utiliser la partie avant @ comme nom
-          role: 'player',
-          coins: 1000
-        };
-        
-        set({ 
-          user: newUser, 
-          isAuthenticated: true, 
-          authToken,
-          users: [...get().users, newUser]
-        });
-        return true;
-      }
+      // In a real app, you would verify the token with the backend
+      // For now, we assume if a token exists, the user is authenticated
+      set({ 
+        isAuthenticated: true, 
+        authToken 
+      });
+      return true;
+
     } catch (error) {
       console.error('Erreur lors de la connexion locale:', error);
       return false;
@@ -482,10 +315,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     
     if (!authToken) {
       console.error('Aucun token d\'authentification trouvé');
+      set({ isLoadingAuth: false });
       return;
     }
 
-    set({ isLoadingUser: true });
+    set({ isLoadingUser: true, isLoadingAuth: true });
 
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/me`, {
@@ -543,35 +377,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ 
           user,
           isAuthenticated: true,
-          isLoadingUser: false
+          isLoadingUser: false,
+          isLoadingAuth: false
         });
       } else {
         console.error('Format de réponse API inattendu:', data);
-        set({ isLoadingUser: false });
+        set({ isLoadingUser: false, isLoadingAuth: false });
       }
     } catch (error) {
-      console.error('Erreur lors de la récupération de l\'utilisateur:', error);
-      
-      // En cas d'erreur, utiliser les données mock si disponibles
-      const authToken = localStorage.getItem('authToken');
-      if (authToken) {
-        // Fallback vers les données mock ou créer un utilisateur basique
-        const fallbackUser: User = {
-          id: Date.now().toString(),
-          email: 'user@ashergame.com',
-          name: 'Utilisateur',
-          role: 'player',
-          coins: 1000
-        };
-
-        set({ 
-          user: fallbackUser,
-          isAuthenticated: true,
-          isLoadingUser: false
-        });
-      } else {
-        set({ isLoadingUser: false });
-      }
+      console.error("Erreur lors de la récupération de l'utilisateur:", error);
+      set({ isLoadingUser: false, isLoadingAuth: false });
     }
   },
 
@@ -761,45 +576,32 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { authToken, user } = get();
     
     if (!authToken || !user || user.role !== 'admin') {
-      console.error('Accès non autorisé pour modifier le statut utilisateur');
-      return false;
+      return { success: false, message: 'Accès non autorisé' };
     }
 
     try {
-      console.log(`🔄 Modification du statut utilisateur ${userId}...`);
       const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/users/${userId}/toggle-status`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true'
         }
       });
 
-      if (!response.ok) {
-        throw new Error(`Erreur HTTP: ${response.status}`);
-      }
-
       const data = await response.json();
-      console.log('✅ Réponse API toggle-status:', data);
 
-      if (data.status === 'success') {
-        // Mettre à jour la liste des utilisateurs localement
+      if (response.ok && data.status === 'success') {
         const { adminUsers } = get();
         const updatedUsers = adminUsers.map(u => 
           u.id === userId ? { ...u, enabled: !u.enabled } : u
         );
-        
         set({ adminUsers: updatedUsers });
-        console.log(`✅ Statut utilisateur ${userId} modifié avec succès`);
-        return true;
+        return { success: true, message: data.message };
       } else {
-        console.error('Échec de la modification du statut:', data);
-        return false;
+        return { success: false, message: data.message || 'Échec de la modification du statut' };
       }
-    } catch (error) {
-      console.error('❌ Erreur lors de la modification du statut:', error);
-      return false;
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Erreur lors de la modification du statut' };
     }
   },
 
@@ -808,93 +610,39 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { authToken, user } = get();
     
     if (!authToken || !user || user.role !== 'admin') {
-      console.error('Accès non autorisé pour modifier le rôle utilisateur');
-      return false;
+      return { success: false, message: 'Accès non autorisé' };
     }
 
     try {
-      console.log(`🔄 Modification du rôle utilisateur ${accountId} vers ${newRole}...`);
       const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/users/${accountId}/toggle-role`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true'
         },
         body: JSON.stringify({ role: newRole })
       });
 
-      if (!response.ok) {
-        throw new Error(`Erreur HTTP: ${response.status}`);
-      }
-
       const data = await response.json();
-      console.log('✅ Réponse API toggle-role:', data);
 
-      if (data.status === 'success') {
-        // Mettre à jour la liste des utilisateurs localement
+      if (response.ok && data.status === 'success') {
         const { adminUsers } = get();
         const updatedUsers = adminUsers.map(u => 
           u.accountId === accountId ? { ...u, role: newRole } : u
         );
-        
         set({ adminUsers: updatedUsers });
-        console.log(`✅ Rôle utilisateur ${accountId} modifié vers ${newRole} avec succès`);
-        return true;
+        return { success: true, message: data.message };
       } else {
-        console.error('Échec de la modification du rôle:', data);
-        return false;
+        return { success: false, message: data.message || 'Échec de la modification du rôle' };
       }
-    } catch (error) {
-      console.error('❌ Erreur lors de la modification du rôle:', error);
-      return false;
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Erreur lors de la modification du rôle' };
     }
   },
   
   register: async (email: string, password: string, name: string, role: UserRole, phone?: string, country?: string, referralCode?: string) => {
-    // Mock registration
-    let initialCoins = 1000; // Coins de base
-    
-    // Bonus de parrainage
-    if (referralCode && validReferralCodes.includes(referralCode.toUpperCase())) {
-      initialCoins += 500; // Bonus d'inscription avec code de parrainage
-    }
-    
-    const newUser: User = {
-      id: Date.now().toString(),
-      email,
-      name,
-      role,
-      coins: initialCoins,
-      phone,
-      country,
-      referralCode: referralCode?.toUpperCase(),
-    };
-    
-    // Ajouter transaction de bonus si code de parrainage valide
-    const newTransactions = [...get().transactions];
-    if (referralCode && validReferralCodes.includes(referralCode.toUpperCase())) {
-      const bonusTransaction: Transaction = {
-        id: Date.now().toString(),
-        userId: newUser.id,
-        type: 'referral_bonus',
-        amount: 500,
-        description: `Bonus de parrainage - Code ${referralCode.toUpperCase()}`,
-        status: 'completed',
-        reference: `REF${Date.now()}`,
-        createdAt: new Date().toISOString()
-      };
-      newTransactions.unshift(bonusTransaction);
-    }
-    
-    // Add to users list
-    set(state => ({
-      user: newUser,
-      users: [...state.users, newUser],
-      transactions: newTransactions,
-      isAuthenticated: true
-    }));
-    
+    // This function is now primarily for local state update after successful API registration
+    // The actual registration API call is handled in Register.tsx
     return true;
   },
   
@@ -943,144 +691,303 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }));
   },
   
-  addGame: (game: Game) => {
+  fetchGames: async () => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/games`, {
+        headers: {
+          'ngrok-skip-browser-warning': 'true'
+        }
+      });
+      if (!response.ok) {
+        throw new Error(`Erreur HTTP: ${response.status}`);
+      }
+      const data = await response.json();
+      if (data.status === 'success') {
+        set({ games: data.data.data }); // Correctly access the nested data array
+      } else {
+        set({ games: [] });
+      }
+    } catch (err) {
+      console.error('Impossible de charger les jeux.', err);
+      set({ games: [] }); // Ensure games is an array on error
+    }
+  },
+
+  addGame: async (gameData: FormData) => {
+    const { authToken, user } = get();
+    if (!authToken || !user || user.role !== 'admin') {
+      throw new Error('Unauthorized');
+    }
+
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/games`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+      },
+      body: gameData
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to add game');
+    }
+
     set(state => ({
-      games: [...state.games, game]
+      games: [...state.games, data.data]
     }));
+
+    return data;
+  },
+
+  updateGame: async (id: string, game: Partial<Game>) => {
+    const { authToken, user } = get();
+    if (!authToken || !user || user.role !== 'admin') {
+      throw new Error('Unauthorized');
+    }
+
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/games/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true'
+      },
+      body: JSON.stringify(game)
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to update game');
+    }
+
+    set(state => ({
+      games: state.games.map(g => g.id === id ? data.data : g)
+    }));
+
+    return data;
+  },
+
+  deleteGame: async (id: string) => {
+    const { authToken, user } = get();
+    if (!authToken || !user || user.role !== 'admin') {
+      throw new Error('Unauthorized');
+    }
+
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/games/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'ngrok-skip-browser-warning': 'true'
+      }
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to delete game');
+    }
+
+    set(state => ({
+      games: state.games.filter(g => g.id !== id)
+    }));
+
+    return data;
   },
 
   createRechargeRequest: async (request: RechargeRequest) => {
-    const { user } = get();
-    if (!user) return;
+    const { authToken, user } = get();
+    if (!user || !authToken) throw new Error('User not authenticated');
 
-    // Simulate file upload and create transaction
-    const newTransaction: Transaction = {
-      id: Date.now().toString(),
-      userId: user.id,
-      type: 'deposit',
-      amount: request.amount,
-      description: `Recharge USDT ${request.network}`,
-      status: 'pending',
-      reference: `TXN${Date.now()}`,
-      network: request.network,
-      proof: URL.createObjectURL(request.proofFile), // In real app, this would be uploaded to server
-      createdAt: new Date().toISOString()
-    };
+    const formData = new FormData();
+    formData.append('amount', request.amount.toString());
+    formData.append('network', request.network);
+    formData.append('address', request.address);
+    formData.append('proofFile', request.proofFile);
 
-    set(state => ({
-      transactions: [newTransaction, ...state.transactions]
-    }));
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/user/recharge-request`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'ngrok-skip-browser-warning': 'true'
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to create recharge request');
+      }
+
+      // Optionally update local state if needed, e.g., add to transactions list
+      // For now, just log success
+      console.log('Recharge request created successfully:', data);
+
+    } catch (error) {
+      console.error('Error creating recharge request:', error);
+      throw error;
+    }
   },
 
   createWithdrawalRequest: async (request: WithdrawalRequest) => {
-    const { user } = get();
-    if (!user) return;
+    const { authToken, user } = get();
+    if (!user || !authToken) throw new Error('User not authenticated');
 
-    // Create withdrawal transaction
-    const newTransaction: Transaction = {
-      id: Date.now().toString(),
-      userId: user.id,
-      type: 'withdrawal',
-      amount: -request.amount, // Negative for withdrawal
-      description: `Retrait USDT ${request.network}`,
-      status: 'pending',
-      reference: `WTH${Date.now()}`,
-      network: request.network,
-      recipientAddress: request.recipientAddress,
-      fee: request.fee,
-      createdAt: new Date().toISOString()
-    };
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/user/withdrawal-request`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
+        body: JSON.stringify(request),
+      });
 
-    // Temporarily deduct coins (will be restored if rejected)
-    const updatedUser = { ...user, coins: user.coins - request.amount };
+      const data = await response.json();
 
-    set(state => ({
-      user: updatedUser,
-      users: state.users.map(u => u.id === user.id ? updatedUser : u),
-      transactions: [newTransaction, ...state.transactions]
-    }));
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to create withdrawal request');
+      }
+
+      // Optionally update local state if needed
+      console.log('Withdrawal request created successfully:', data);
+
+    } catch (error) {
+      console.error('Error creating withdrawal request:', error);
+      throw error;
+    }
   },
 
   createCashierRequest: async (request: Partial<CashierRequest>) => {
-    const { user } = get();
-    if (!user) return;
+    const { authToken, user } = get();
+    if (!user || !authToken) throw new Error('User not authenticated');
 
-    const newRequest: CashierRequest = {
-      id: Date.now().toString(),
-      userId: user.id,
-      userName: user.name,
-      userEmail: user.email,
-      motivation: request.motivation || '',
-      experience: request.experience || '',
-      availability: request.availability || '',
-      region: request.region || '',
-      languages: request.languages || [],
-      expectedVolume: request.expectedVolume || '',
-      referrals: request.referrals || '',
-      identityDocument: request.identityDocument || null,
-      proofOfAddress: request.proofOfAddress || null,
-      bankStatement: request.bankStatement || null,
-      status: 'pending',
-      submittedAt: new Date().toISOString()
-    };
+    const formData = new FormData();
+    formData.append('motivation', request.motivation || '');
+    formData.append('experience', request.experience || '');
+    formData.append('availability', request.availability || '');
+    formData.append('region', request.region || '');
+    formData.append('expectedVolume', request.expectedVolume || '');
+    formData.append('referrals', request.referrals || '');
+    request.languages?.forEach(lang => formData.append('languages[]', lang));
 
-    set(state => ({
-      cashierRequests: [...state.cashierRequests, newRequest]
-    }));
+    if (request.identityDocument) formData.append('identityDocument', request.identityDocument);
+    if (request.proofOfAddress) formData.append('proofOfAddress', request.proofOfAddress);
+    if (request.bankStatement) formData.append('bankStatement', request.bankStatement);
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/user/cashier-request`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'ngrok-skip-browser-warning': 'true'
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to create cashier request');
+      }
+
+      console.log('Cashier request created successfully:', data);
+
+    } catch (error) {
+      console.error('Error creating cashier request:', error);
+      throw error;
+    }
   },
 
   approveCashierRequest: async (requestId: string, reviewNotes?: string) => {
-    const { user } = get();
-    if (!user || user.role !== 'admin') return;
+    const { authToken, user } = get();
+    if (!user || user.role !== 'admin' || !authToken) throw new Error('Unauthorized');
 
-    set(state => ({
-      cashierRequests: state.cashierRequests.map(req =>
-        req.id === requestId
-          ? {
-              ...req,
-              status: 'approved' as const,
-              reviewedAt: new Date().toISOString(),
-              reviewedBy: user.id,
-              reviewNotes
-            }
-          : req
-      )
-    }));
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/cashier-requests/${requestId}/approve`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
+        body: JSON.stringify({ reviewNotes }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to approve cashier request');
+      }
+
+      console.log('Cashier request approved successfully:', data);
+
+    } catch (error) {
+      console.error('Error approving cashier request:', error);
+      throw error;
+    }
   },
 
   rejectCashierRequest: async (requestId: string, reviewNotes?: string) => {
-    const { user } = get();
-    if (!user || user.role !== 'admin') return;
+    const { authToken, user } = get();
+    if (!user || user.role !== 'admin' || !authToken) throw new Error('Unauthorized');
 
-    set(state => ({
-      cashierRequests: state.cashierRequests.map(req =>
-        req.id === requestId
-          ? {
-              ...req,
-              status: 'rejected' as const,
-              reviewedAt: new Date().toISOString(),
-              reviewedBy: user.id,
-              reviewNotes
-            }
-          : req
-      )
-    }));
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/cashier-requests/${requestId}/reject`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
+        body: JSON.stringify({ reviewNotes }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to reject cashier request');
+      }
+
+      console.log('Cashier request rejected successfully:', data);
+
+    } catch (error) {
+      console.error('Error rejecting cashier request:', error);
+      throw error;
+    }
   },
 
   createCashier: async (cashierData: any) => {
-    const newCashier: User = {
-      id: Date.now().toString(),
-      email: cashierData.email,
-      name: cashierData.name,
-      role: 'cashier',
-      coins: cashierData.initialCoins || 5000,
-      phone: cashierData.phone,
-      country: cashierData.country,
-    };
+    const { authToken, user } = get();
+    if (!user || user.role !== 'admin' || !authToken) throw new Error('Unauthorized');
 
-    set(state => ({
-      users: [...state.users, newCashier]
-    }));
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/cashiers`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
+        body: JSON.stringify(cashierData),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to create cashier');
+      }
+
+      console.log('Cashier created successfully:', data);
+
+    } catch (error) {
+      console.error('Error creating cashier:', error);
+      throw error;
+    }
   },
 
   rechargeCashier: async (username: string, amount: number) => {
@@ -1122,4 +1029,171 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return false;
     }
   },
+
+  rechargeUser: async (username: string, amount: number) => {
+    const { authToken, user } = get();
+    if (!authToken || !user || (user.role !== 'admin' && user.role !== 'cashier')) {
+      return { success: false, message: 'Accès non autorisé pour recharger un utilisateur' };
+    }
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/users/recharge`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, amount })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || `Erreur HTTP: ${response.status}`);
+      }
+
+      if (data.status === 'success') {
+        // Mettre à jour l'état local
+        set(state => ({
+          adminUsers: state.adminUsers.map(u => 
+            u.username === username ? { ...u, coins: u.coins + amount } : u
+          )
+        }));
+        return { success: true, message: data.message };
+      } else {
+        return { success: false, message: data.message || 'Une erreur est survenue' };
+      }
+    } catch (error: any) {
+      console.error("Erreur lors de la recharge de l'utilisateur:", error);
+      return { success: false, message: error.message || "Erreur lors de la recharge de l'utilisateur" };
+    }
+  },
+
+  rechargePlayerByCashier: async (username: string, amount: number) => {
+    const { authToken, user } = get();
+    if (!authToken || !user || user.role !== 'cashier') {
+      return { success: false, message: 'Accès non autorisé' };
+    }
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/cashier/recharge`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, amount })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.status === 'success') {
+        // Mettre à jour le solde du caissier
+        set(state => ({
+          user: state.user ? { ...state.user, coins: state.user.coins - amount } : null
+        }));
+        return { success: true, message: data.message };
+      } else {
+        return { success: false, message: data.message || 'Une erreur est survenue' };
+      }
+    } catch (error: any) {
+      console.error('Erreur lors de la recharge par le caissier:', error);
+      return { success: false, message: error.message || 'Erreur lors de la recharge' };
+    }
+  },
+
+  fetchAffiliateStats: async () => {
+    const { authToken } = get();
+    if (!authToken) return;
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/affiliate/stats`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+        },
+      });
+      const data = await response.json();
+      if (data.status === 'success') {
+        set({ affiliateStats: data.data });
+      }
+    } catch (error) {
+      console.error('Failed to fetch affiliate stats:', error);
+    }
+  },
+
+  fetchCashierStats: async () => {
+    const { authToken } = get();
+    if (!authToken) return;
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/cashier/stats`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+        },
+      });
+      const data = await response.json();
+      if (data.status === 'success') {
+        set({ cashierStats: data.data });
+      }
+    } catch (error) {
+      console.error('Failed to fetch cashier stats:', error);
+    }
+  },
+
+  fetchPlayerStats: async () => {
+    const { authToken } = get();
+    if (!authToken) return;
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/player/stats`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+        },
+      });
+      const data = await response.json();
+      if (data.status === 'success') {
+        set({ playerStats: data.data });
+      }
+    } catch (error) {
+      console.error('Failed to fetch player stats:', error);
+    }
+  },
+
+  requestWithdrawal: async (amount: number, network: string, address: string) => {
+    const { authToken, user } = get();
+    if (!authToken || !user) {
+      return { success: false, message: 'Utilisateur non authentifié' };
+    }
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/player/withdrawal-request`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ amount, network, address }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.status === 'success') {
+        // Mettre à jour le solde de l'utilisateur localement
+        set(state => ({
+          user: state.user ? { ...state.user, coins: state.user.coins - amount } : null
+        }));
+        return { success: true, message: data.message };
+      } else {
+        return { success: false, message: data.message || 'Une erreur est survenue' };
+      }
+    } catch (error: any) {
+      console.error('Erreur lors de la demande de retrait:', error);
+      return { success: false, message: error.message || 'Erreur lors de la demande de retrait' };
+    }
+  },
 }));
+
+// Initialize auth state
+if (localStorage.getItem('authToken')) {
+  useAuthStore.getState().fetchCurrentUser();
+}

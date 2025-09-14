@@ -37,22 +37,14 @@ export const Login: React.FC = () => {
       // Gestion du succès
       if (data.status === 'success') {
         // Stocker le token d'authentification avec structure complète
-        const { token } = data.data;
-        localStorage.setItem('authToken', token.token);
-        localStorage.setItem('tokenType', token.type);
-        
-        // Optionnel: stocker les autres propriétés du token si nécessaire
-        if (token.abilities) {
-          localStorage.setItem('tokenAbilities', JSON.stringify(token.abilities));
-        }
-        if (token.expiresAt) {
-          localStorage.setItem('tokenExpiresAt', token.expiresAt);
-        }
+        const { token } = data.data; // token est maintenant l'objet { type, token, ... }
+        localStorage.setItem('authToken', token.token); // On accède à la propriété token de l'objet
         
         // Connexion locale avec le store
         const success = await login(email, password);
         if (success) {
-          navigate('/dashboard');
+          // Forcer le rechargement de la page pour garantir la mise à jour de l'état d'authentification
+          window.location.href = '/dashboard';
         } else {
           setError('Erreur lors de la connexion locale');
         }
@@ -172,7 +164,7 @@ export const Login: React.FC = () => {
           </div>
 
           {/* Demo accounts */}
-          <div className="mt-6 p-4 bg-base-300 rounded-lg">
+          {/* <div className="mt-6 p-4 bg-base-300 rounded-lg">
             <p className="text-sm font-medium mb-2">Comptes de démonstration :</p>
             <div className="text-xs space-y-1 text-base-content/70">
               <p><strong>Admin:</strong> admin@ashergame.com</p>
@@ -180,7 +172,7 @@ export const Login: React.FC = () => {
               <p><strong>Joueur:</strong> player@ashergame.com</p>
               <p className="text-primary">Mot de passe: n'importe lequel</p>
             </div>
-          </div>
+          </div> */}
         </div>
       </div>
     </div>

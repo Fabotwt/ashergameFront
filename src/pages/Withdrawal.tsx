@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
+import toast from 'react-hot-toast';
 import { 
   ArrowDownLeft, 
   Wallet, 
@@ -14,7 +15,7 @@ import {
 } from 'lucide-react';
 
 export const Withdrawal: React.FC = () => {
-  const { user, createWithdrawalRequest } = useAuthStore();
+  const { user, requestWithdrawal } = useAuthStore();
   const [selectedNetwork, setSelectedNetwork] = useState('TRC20');
   const [amount, setAmount] = useState('');
   const [recipientAddress, setRecipientAddress] = useState('');
@@ -76,19 +77,20 @@ export const Withdrawal: React.FC = () => {
     if (!isValidWithdrawal()) return;
 
     setLoading(true);
-    try {
-      await createWithdrawalRequest({
-        amount: parseFloat(amount),
-        network: selectedNetwork,
-        recipientAddress,
-        fee: selectedNetworkInfo.fee
-      });
-      setStep(4); // Success step
-    } catch (error) {
-      console.error('Erreur lors de la création de la demande:', error);
-    } finally {
-      setLoading(false);
+    const result = await requestWithdrawal(
+      parseFloat(amount),
+      selectedNetwork,
+      recipientAddress
+    );
+
+    if (result.success) {
+      toast.success(result.message);
+      setStep(4); // Go to success step
+    } else {
+      toast.error(result.message);
     }
+
+    setLoading(false);
   };
 
   const renderStep1 = () => (

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
+import toast from 'react-hot-toast';
 import { 
   Users, 
   Search, 
@@ -13,7 +14,6 @@ import {
   Mail,
   Phone,
   MapPin,
-  Calendar,
   Coins,
   AlertTriangle,
   ChevronLeft,
@@ -35,16 +35,15 @@ export const AdminUsers: React.FC = () => {
     fetchAdminStats, 
     toggleUserStatus, 
     toggleUserRole, 
-    rechargeCashier
+    rechargeUser
   } = useAuthStore();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('active');
   const [currentPage, setCurrentPage] = useState(1);
-  const [flashMessage, setFlashMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
-  const [rechargeUser, setRechargeUser] = useState<any | null>(null);
+  const [rechargeModalUser, setRechargeModalUser] = useState<any | null>(null);
   const [rechargeAmount, setRechargeAmount] = useState(0);
 
   // Charger les données au montage et lorsque les filtres changent
@@ -105,10 +104,11 @@ export const AdminUsers: React.FC = () => {
   }
 
   const handleToggleStatus = async (userId: string) => {
-    const success = await toggleUserStatus(userId);
-    if (success) {
-      // Optionnel: afficher une notification de succès
-      console.log('Statut utilisateur modifié avec succès');
+    const result = await toggleUserStatus(userId);
+    if (result.success) {
+      toast.success(result.message || 'Statut utilisateur modifié avec succès');
+    } else {
+      toast.error(result.message || 'Erreur lors de la modification du statut');
     }
   };
 
@@ -133,13 +133,11 @@ export const AdminUsers: React.FC = () => {
         newRole = 'player';
     }
 
-    const success = await toggleUserRole(accountId, newRole);
-    if (success) {
-      setFlashMessage({ type: 'success', message: `Rôle utilisateur modifié vers ${newRole} avec succès` });
-      setTimeout(() => setFlashMessage(null), 3000);
+    const result = await toggleUserRole(accountId, newRole);
+    if (result.success) {
+      toast.success(result.message || `Rôle utilisateur modifié vers ${newRole} avec succès`);
     } else {
-      setFlashMessage({ type: 'error', message: 'Erreur lors de la modification du rôle' });
-      setTimeout(() => setFlashMessage(null), 3000);
+      toast.error(result.message || 'Erreur lors de la modification du rôle');
     }
   };
 
@@ -168,16 +166,17 @@ export const AdminUsers: React.FC = () => {
   };
 
   const handleRecharge = async () => {
-    if (!rechargeUser || !rechargeAmount) return;
-    const success = await rechargeCashier(rechargeUser.accountNumber, rechargeAmount);
-    if (success) {
-      setFlashMessage({ type: 'success', message: 'Caissier rechargé avec succès' });
-      setTimeout(() => setFlashMessage(null), 3000);
-    } else {
-      setFlashMessage({ type: 'error', message: 'Erreur lors de la recharge' });
-      setTimeout(() => setFlashMessage(null), 3000);
+    if (!rechargeModalUser || !rechargeAmount || rechargeAmount <= 0) {
+      toast.error('Veuillez entrer un montant valide.');
+      return;
     }
-    setRechargeUser(null);
+    const result = await rechargeUser(rechargeModalUser.username, rechargeAmount);
+    if (result.success) {
+      toast.success(result.message || 'Utilisateur rechargé avec succès !');
+    } else {
+      toast.error(result.message || 'Erreur lors de la recharge.');
+    }
+    setRechargeModalUser(null);
     setRechargeAmount(0);
   };
 
@@ -195,14 +194,6 @@ export const AdminUsers: React.FC = () => {
   return (
     <div className="min-h-screen bg-base-100 p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Flash Message */}
-        {flashMessage && (
-          <div className={`alert ${flashMessage.type === 'success' ? 'alert-success' : 'alert-error'} shadow-lg mb-4`}>
-            <div>
-              <span>{flashMessage.message}</span>
-            </div>
-          </div>
-        )}
 
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
@@ -389,15 +380,13 @@ export const AdminUsers: React.FC = () => {
                         <Eye className="w-4 h-4" />
                         Détails
                       </button>
-                      {user.role === 'cashier' && (
-                        <button
-                          className="btn btn-sm btn-success"
-                          onClick={() => setRechargeUser(user)}
-                        >
-                          <Coins className="w-4 h-4" />
-                          Recharger
-                        </button>
-                      )}
+                      <button
+                        className="btn btn-sm btn-success"
+                        onClick={() => setRechargeModalUser(user)}
+                      >
+                        <Coins className="w-4 h-4" />
+                        Recharger
+                      </button>
                     </div>
                   </div>
 
@@ -551,12 +540,12 @@ export const AdminUsers: React.FC = () => {
       )}
 
       {/* Recharge Modal */}
-      {rechargeUser && (
+      {rechargeModalUser && (
         <div className="modal modal-open">
           <div className="modal-box">
-            <h3 className="font-bold text-lg">Recharger le caissier: {rechargeUser.name}</h3>
+            <h3 className="font-bold text-lg">Recharger: {rechargeModalUser.name}</h3>
             <div className="py-4">
-              <p>Numéro de compte: {rechargeUser.accountNumber || 'N/A'}</p>
+              <p>Username: {rechargeModalUser.username || 'N/A'}</p>
               <div className="form-control">
                 <label className="label">
                   <span className="label-text">Montant</span>
@@ -572,7 +561,7 @@ export const AdminUsers: React.FC = () => {
             </div>
             <div className="modal-action">
               <button className="btn btn-success" onClick={handleRecharge}>Recharger</button>
-              <button className="btn" onClick={() => setRechargeUser(null)}>Annuler</button>
+              <button className="btn" onClick={() => setRechargeModalUser(null)}>Annuler</button>
             </div>
           </div>
         </div>
